@@ -29,7 +29,7 @@ from typing import Callable, Collection, Optional, Sequence
 from contextlib import ExitStack
 
 
-# %% [markdown] id="65E_RUocx1r1"
+# %% [markdown] id="65E_RUocx1r1" tags=[] jp-MarkdownHeadingCollapsed=true
 # ## Generic functions
 
 # %% id="MoStKBIVyEzT"
@@ -107,7 +107,7 @@ def train(
 
             # update parameters
             optimizer.step()
-
+            
             # update progress bar
             if progress is not None:
                 pbar.postfix = f"train batch loss: {loss.item():.6f}"
@@ -196,7 +196,43 @@ def test(
     return avg_loss
 
 
-# %% [markdown] id="zP_r7TYb2BWx"
+# %%
+class StepwiseScheduler:
+    def __init__(self, optimizer, sequence: Sequence):
+        assert len(optimizer.param_groups) == 1
+
+        self.optimizer = optimizer
+        self.sequence = np.copy(sequence)
+        self._borders = np.cumsum([_[0] for _ in self.sequence])
+
+        self._step_count = 0
+        self._last_lr = None
+
+        self.step()
+    
+    def get_last_lr(self) -> list:
+        return self._last_lr
+
+    def get_lr(self) -> list:
+        mask = self._step_count <= self._borders
+        if not np.any(mask):
+            lr = [self.sequence[-1][1]]
+        else:
+            idx = mask.nonzero()[0][0]
+            lr = [self.sequence[idx][1]]
+        
+        return lr
+    
+    def step(self):
+        self._step_count += 1
+        lr = self.get_lr()
+        for group, crt_lr in zip(self.optimizer.param_groups, lr):
+            group["lr"] = crt_lr
+        
+        self._last_lr = [group["lr"] for group in self.optimizer.param_groups]
+
+
+# %% [markdown] id="zP_r7TYb2BWx" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Dynamical systems
 
 # %% id="fk86s7W52GUw"
@@ -277,7 +313,7 @@ class PlaceGridMotionSimulator:
         return torch.from_numpy(x_shifted.real)
 
 
-# %% [markdown] id="f-yoM2yFx4Rm"
+# %% [markdown] id="f-yoM2yFx4Rm" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Network models
 
 # %% id="gqliVXkh0SwA"
@@ -617,11 +653,15 @@ class PlaceGridSystemNonBio:
     
     @staticmethod
     def _get_lambda_from_parts(rho: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
+        xs = rho[:len(theta)] * torch.cos(theta)
+        ys = rho[:len(theta)] * torch.sin(theta)
+        
         blocks = []
-        for crt_rho, crt_theta in zip(rho, theta):
-            crt_a = crt_rho * torch.cos(crt_theta)
-            crt_b = crt_rho * torch.sin(crt_theta)
-            crt_block = torch.FloatTensor([[crt_a, -crt_b], [crt_b, crt_a]])
+        for i in range(len(theta)):
+            crt_block = torch.vstack((
+                torch.hstack((xs[i], -ys[i])),
+                torch.hstack((ys[i], xs[i])),
+            ))
             blocks.append(crt_block)
         
         if len(rho) > len(theta):
@@ -629,7 +669,7 @@ class PlaceGridSystemNonBio:
         
         return torch.block_diag(*blocks)
 
-    def get_lambda_s_matrix(self, s: float) -> torch.Tensor:
+    def get_lambda_s_matrix(self, s: torch.Tensor) -> torch.Tensor:
         """ Generate the matrix that propagates grid cells forward.
         
         If `self.m % 2 == 0`, this is a block-diagonal matrix made up of 2x2 blocks
@@ -646,7 +686,7 @@ class PlaceGridSystemNonBio:
 # %% [markdown] id="himLi2WNQE6t"
 # ## Unit tests for network models
 
-# %% [markdown] id="lSbNwnZqX6EJ"
+# %% [markdown] id="lSbNwnZqX6EJ" tags=[] jp-MarkdownHeadingCollapsed=true
 # ### Complex-valued version
 
 # %% id="-igvvdX6JEC6"
@@ -822,7 +862,7 @@ def test_lbd_derivative_again():
 test_lbd_derivative_again()
 
 
-# %% [markdown] id="iebpUAstX8h6"
+# %% [markdown] id="iebpUAstX8h6" tags=[] jp-MarkdownHeadingCollapsed=true
 # ### Real-valued version
 
 # %% id="BaZbZ8w-ZgkR"
@@ -1026,7 +1066,7 @@ def test_loss_is_correct():
 # %% colab={"base_uri": "https://localhost:8080/"} id="r1Rb_wUthf6U" outputId="96c3846e-45eb-4f27-f351-2769f5aee6af"
 test_loss_is_correct()
 
-# %% [markdown] id="n1dz8V341gMS"
+# %% [markdown] id="n1dz8V341gMS" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Test dataset generation
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 80} id="kstusppd5HNF" outputId="68856bcd-d61a-4182-e9fe-31cd54df580a"
@@ -1076,7 +1116,7 @@ dataset_full = [(trajectory[i], trajectory[i + 1], s[i]) for i in range(n_sample
 
 test_size = 500
 dataset_train = dataset_full[:-test_size]
-dataset_test = dataset_full[test_size:]
+dataset_test = dataset_full[-test_size:]
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 313} id="9yehqta96sDy" outputId="1b286f8d-7eca-4a1f-fef3-f0fce4595ce7"
 crt_n = 4 * n
@@ -1107,7 +1147,7 @@ ax.set_xlabel("position")
 ax.set_ylabel("average activation")
 sns.despine(ax=ax, offset=10)
 
-# %% [markdown] id="An9kiTssb1ZN"
+# %% [markdown] id="An9kiTssb1ZN" tags=[] jp-MarkdownHeadingCollapsed=true
 # ### Check that the generated patterns exactly match Fourier translations
 
 # %% id="lfaJ_lShdR-W"
@@ -1163,8 +1203,11 @@ np.quantile(crt_errors, [0.005, 0.025, 0.500, 0.975, 0.995])
 # %% colab={"base_uri": "https://localhost:8080/", "height": 96} id="47K9nTAU-fco" outputId="b678e18c-c2d0-4dd2-fd19-da3ba7360ebd"
 plt.imshow(np.vstack((x, y, y_pred)))
 
+# %% [markdown] tags=[]
+# ### Checks for complex-valued version
+
 # %% [markdown] id="pQU-ZrMTb45r"
-# ### Check that a model initialized at Fourier solution yields (almost) zero loss -- complex-valued version
+# #### Check that a model initialized at Fourier solution yields (almost) zero loss
 
 # %% id="-aND72Nj-MGy"
 test_system = PlaceGridSystemNonBioCplx(n, n - 1)
@@ -1208,7 +1251,7 @@ plt.imshow(np.vstack((x, y, y_pred)))
 plt.imshow(test_system.U.real)
 
 # %% [markdown] id="Hf3o2Y8RZY7r"
-# ### Sanity check: projection to valid parameters does not spoil global optimum
+# #### Sanity check: projection to valid parameters does not spoil global optimum
 
 # %% id="i50nRq2ZZcZ8"
 crt_old_U = torch.clone(test_system.U)
@@ -1222,7 +1265,7 @@ assert torch.allclose(crt_old_V, test_system.V)
 assert torch.allclose(crt_old_lbd, test_system.lbd)
 
 # %% [markdown] id="ULf2KRNTYjtr"
-# ### Sanity check: gradient (almost) zero at global optimum
+# #### Sanity check: gradient (almost) zero at global optimum
 
 # %% id="N3NeMljAYof_"
 test_system.U.requires_grad = True
@@ -1246,7 +1289,7 @@ assert torch.max(torch.abs(test_system.V.grad)) < 1e-9
 assert torch.max(torch.abs(test_system.lbd.grad)) < 1e-6
 
 # %% [markdown] id="8KEXDbWbWkOG"
-# ### Sanity check: Adam optimization does not lead us away from global optimum
+# #### Sanity check: SGD optimization does not lead us away from global optimum
 
 # %% colab={"base_uri": "https://localhost:8080/"} id="OTKdAHfiWsir" outputId="0d308b51-99ef-48a9-b0ab-91b55c25fa7b"
 batch_size = 200
@@ -1295,45 +1338,11 @@ ax.legend(frameon=False)
 
 sns.despine(ax=ax, offset=10)
 
+# %% [markdown]
+# ### Checks for real-valued version
 
 # %% [markdown] id="K9I6NTxOb-dK"
-# ### Run the learning, check outcome
-
-# %% id="EpvZawUXtHJg"
-class StepwiseScheduler:
-    def __init__(self, optimizer, sequence: Sequence):
-        assert len(optimizer.param_groups) == 1
-
-        self.optimizer = optimizer
-        self.sequence = np.copy(sequence)
-        self._borders = np.cumsum([_[0] for _ in self.sequence])
-
-        self._step_count = 0
-        self._last_lr = None
-
-        self.step()
-    
-    def get_last_lr(self) -> list:
-        return self._last_lr
-
-    def get_lr(self) -> list:
-        mask = self._step_count <= self._borders
-        if not np.any(mask):
-            lr = [self.sequence[-1][1]]
-        else:
-            idx = mask.nonzero()[0][0]
-            lr = [self.sequence[idx][1]]
-        
-        return lr
-    
-    def step(self):
-        self._step_count += 1
-        lr = self.get_lr()
-        for group, crt_lr in zip(self.optimizer.param_groups, lr):
-            group["lr"] = crt_lr
-        
-        self._last_lr = [group["lr"] for group in self.optimizer.param_groups]
-
+# ### Run learning for complex-valued version
 
 # %% colab={"base_uri": "https://localhost:8080/"} id="4ybXgIwOPgJ-" outputId="a6cfbd62-6da4-4602-8b32-83ffb3658a3c"
 torch.manual_seed(0)
@@ -1416,7 +1425,7 @@ sns.despine(ax=ax, offset=10)
 )
 
 # %% [markdown] id="ZVoVwL8MDRTz"
-# ### Try learned system on examples
+# #### Try learned system on examples
 
 # %% id="w7yv8vblDVIX"
 torch.manual_seed(1)
@@ -1469,6 +1478,172 @@ for i, crt_name in enumerate(crt_d):
 axs[1, 0].set_xlabel("Re")
 axs[1, 1].set_xlabel("Im")
 
+# %% [markdown] id="K9I6NTxOb-dK"
+# ### Run learning for real-valued version
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="4ybXgIwOPgJ-" outputId="a6cfbd62-6da4-4602-8b32-83ffb3658a3c"
+torch.manual_seed(0)
+
+m = n - 1
+
+system = PlaceGridSystemNonBio(n, m)
+
+original_U = torch.clone(system.U).detach()
+original_V = torch.clone(system.V).detach()
+original_xi = torch.clone(system.xi).detach()
+original_theta = torch.clone(system.theta).detach()
+
+optimizer = torch.optim.Adagrad(system.parameters(), lr=0.05)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.995)
+# scheduler = StepwiseScheduler(optimizer, [(50, 0.05), (100, 0.2), (100, 0.3), (250, 0.1)])
+scheduler = None
+
+train_results = train(
+    system,
+    "cpu",
+    dataloader_train,
+    optimizer,
+    test_set=dataloader_test,
+    test_every=50,
+    scheduler=scheduler,
+)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="hHwjBKEhvbBY" outputId="6e976c16-8863-47c5-c091-edfd870a3673"
+# scheduler.get_last_lr()
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="g5Tje2Pj4FRF" outputId="97834b66-02a8-4a1a-cf29-659a23977ed8"
+(
+    torch.max(torch.abs(system.U - original_U)),
+    torch.max(torch.abs(system.V - original_V)),
+    torch.max(torch.abs(system.xi - original_xi)),
+    torch.max(torch.abs(system.theta - original_theta)),
+)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 288} id="z4y94yW-3aTD" outputId="46649305-1cc4-44ab-83d1-078b11cdb4fa"
+fig, ax = plt.subplots()
+ax.semilogy(train_results.train_loss, lw=0.5, label="train")
+ax.semilogy(train_results.test_idxs, train_results.test_loss, lw=1.0, label="test")
+ax.set_xlabel("batch")
+ax.set_ylabel("loss")
+
+ax.axhline(
+    train_results.test_loss[-1],
+    lw=2.0,
+    ls="--",
+    c="C1",
+    label=f"final test loss: {train_results.test_loss[-1]:.2g}"
+)
+
+ax.legend(frameon=False)
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="4_FpjTeD2OI3" outputId="365616d6-9602-46f3-c09a-c74b877a8f01"
+crt_tensor = (system.U @ system.V).detach().numpy()
+crt_lim = np.max(np.abs(crt_tensor))
+plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
+plt.colorbar()
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 291} id="NkhI_uk68Fla" outputId="28944db8-c6ca-4c58-b020-01aa97855955"
+fig, ax = plt.subplots()
+crt_rho = (1 / torch.cosh(system.xi)).detach().numpy()
+crt_theta = system.theta.detach().numpy()
+crt_v = crt_rho[:len(crt_theta)] * np.exp(1j * crt_theta)
+if len(crt_rho) > len(crt_theta):
+    crt_v = np.hstack((crt_v, [crt_rho[-1]]))
+
+ax.axhline(0, ls=":", lw=1, c="gray")
+ax.axvline(0, ls=":", lw=1, c="gray")
+
+ax.scatter(crt_v.real, crt_v.imag)
+ax.set_aspect(1)
+ax.set_xlabel("Re($\\lambda$)")
+ax.set_ylabel("Im($\\lambda$)")
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="o0J_lkEr6caL" outputId="182882fb-3368-4fed-9f43-8fc81904d8e4"
+(
+    torch.max(torch.abs(system.U)),
+    torch.max(torch.abs(system.V)),
+)
+
+# %% [markdown] id="ZVoVwL8MDRTz"
+# #### Try learned system on examples
+
+# %% id="w7yv8vblDVIX"
+torch.manual_seed(1)
+
+test_simulator = PlaceGridMotionSimulator(n, sigma=2)
+
+test_n_samples = 10
+test_x = n * torch.rand(test_n_samples)
+test_trajectory = []
+for i in range(test_n_samples):
+    test_simulator.x = test_x[i].item()
+    test_trajectory.append(test_simulator().type(torch.float32))
+
+test_trajectory = torch.stack(test_trajectory)
+
+# %% id="zQ_B-mad_U5s"
+test_moved = system.propagate_place(test_trajectory, 3 * torch.ones(test_n_samples))
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 330} id="_sc18G5-eewh" outputId="c22cd697-7858-4c07-a504-3d360a9ac4ca"
+fig, (ax1, ax2) = plt.subplots(2, 1, constrained_layout=True)
+ax1.imshow(test_trajectory)
+ax1.set_ylabel("time")
+ax1.set_xlabel("position")
+
+ax2.imshow(test_moved.detach().numpy())
+ax2.set_ylabel("time")
+ax2.set_xlabel("position")
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="LK5qBNhE4Y3o" outputId="e09dba93-21b4-495c-dc43-950e6e700031"
+[torch.min(torch.abs(system.xi)), torch.max(torch.abs(system.xi))]
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="1DkYy5qgengL" outputId="1f3ae84d-d483-4b7d-8813-be3e25a7e2e0"
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+# crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
+for i, crt_name in enumerate(crt_d):
+    crt_mat = crt_d[crt_name].detach().numpy()
+
+    # crt_mat = crt_mat[:, crt_ordering]
+    # crt_mat = crt_mat[crt_ordering, :]
+
+    crt_lim = np.max(np.abs(crt_mat))
+    
+    ax = axs[i]
+    ax.imshow(crt_mat, vmin=-crt_lim, vmax=crt_lim, cmap="RdBu")
+
+    ax.set_title(crt_name)
+
+# %%
+1 / np.cosh(system.xi.detach().numpy())
+
+# %%
+tmp = test_trajectory[0]
+tmp_g = system.to_grid(tmp)
+fig, ax = plt.subplots()
+ax.imshow([tmp.numpy()], vmin=0)
+
+fig, ax = plt.subplots()
+crt_l = np.max(np.abs(tmp_g.detach().numpy()))
+ax.imshow([tmp_g.detach().numpy()], vmin=-crt_l, vmax=crt_l, cmap="RdBu")
+
+tmp_back = system.from_grid(tmp_g)
+fig, ax = plt.subplots()
+ax.imshow([tmp_back.detach().numpy()], vmin=0)
+
+# %%
+fig, ax = plt.subplots()
+ax.plot(tmp.detach().numpy())
+ax.plot(tmp_back.detach().numpy())
+
+# %%
+plt.imshow(system.U.detach().numpy())
+plt.colorbar()
+
 # %% [markdown] id="euyEHDjR1mOX"
 # ## Test learning on smaller system
 
@@ -1486,7 +1661,7 @@ dataset_full = [(trajectory[i], trajectory[i + 1], s[i]) for i in range(n_sample
 
 test_size = 1000
 dataset_train = dataset_full[:-test_size]
-dataset_test = dataset_full[test_size:]
+dataset_test = dataset_full[-test_size:]
 
 batch_size = 200
 dataloader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size)
@@ -1520,6 +1695,9 @@ ax.set_ylim(0, None)
 ax.set_xlabel("position")
 ax.set_ylabel("average activation")
 sns.despine(ax=ax, offset=10)
+
+# %% [markdown]
+# ### Complex-valued simulation
 
 # %% colab={"base_uri": "https://localhost:8080/"} id="IOhW9zr21kC2" outputId="3afb29ae-c2a7-4137-fc7d-53b3df09b35e"
 torch.manual_seed(0)
@@ -1657,6 +1835,176 @@ for i, crt_name in enumerate(crt_d):
 
 axs[1, 0].set_xlabel("Re")
 axs[1, 1].set_xlabel("Im")
+
+# %% [markdown]
+# ### Real-valued simulation
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="IOhW9zr21kC2" outputId="3afb29ae-c2a7-4137-fc7d-53b3df09b35e"
+torch.manual_seed(0)
+
+m = n - 1
+
+system = PlaceGridSystemNonBio(n, m)
+
+original_U = torch.clone(system.U).detach()
+original_V = torch.clone(system.V).detach()
+original_xi = torch.clone(system.xi).detach()
+original_theta = torch.clone(system.theta).detach()
+
+optimizer = torch.optim.AdamW(system.parameters(), lr=0.01)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.995)
+# scheduler = StepwiseScheduler(
+#     optimizer,
+#     [(100, 0.01), (100, 0.05), (100, 0.03), (300, 0.02), (1600, 0.01), (100, 0.005)]
+# )
+scheduler = None
+train_results = train(
+    system,
+    "cpu",
+    dataloader_train,
+    optimizer,
+    test_set=dataloader_test,
+    test_every=50,
+    scheduler=scheduler,
+)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="JWLExrOc1kC2" outputId="dd0ea4c7-bed1-48fb-faa3-023829028047"
+# scheduler.get_last_lr()
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="a1K3zZ2F1kC2" outputId="1a708ae2-7716-4421-ed10-ba79dc90c237"
+(
+    torch.median(torch.abs(system.U - original_U)),
+    torch.median(torch.abs(system.V - original_V)),
+    torch.median(torch.abs(system.xi - original_xi)),
+    torch.median(torch.abs(system.theta - original_theta)),
+)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 288} id="m6dh_6_31kC3" outputId="1b6bb86a-e4ab-4aea-b33f-19cfed2a70bc"
+fig, ax = plt.subplots()
+ax.semilogy(train_results.train_loss, lw=0.5, label="train")
+ax.semilogy(train_results.test_idxs, train_results.test_loss, lw=1.0, label="test")
+ax.set_xlabel("batch")
+ax.set_ylabel("loss")
+
+ax.axhline(
+    train_results.test_loss[-1],
+    lw=2.0,
+    ls="--",
+    c="C1",
+    label=f"final test loss: {train_results.test_loss[-1]:.2g}"
+)
+
+ax.legend(frameon=False)
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="yZNOnbKV1kC3" outputId="bdecdb0c-381d-4c4c-fcda-75b60678b7e9"
+crt_tensor = (system.U @ system.V).detach().numpy()
+crt_lim = np.max(np.abs(crt_tensor))
+plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
+plt.colorbar()
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 289} id="3sxD_nl21kC3" outputId="729a9946-4aa2-4fb4-c48c-a7b511d1da29"
+fig, ax = plt.subplots()
+crt_rho = (1 / torch.cosh(system.xi)).detach().numpy()
+crt_theta = system.theta.detach().numpy()
+crt_v = crt_rho[:len(crt_theta)] * np.exp(1j * crt_theta)
+if len(crt_rho) > len(crt_theta):
+    crt_v = np.hstack((crt_v, [crt_rho[-1]]))
+
+ax.axhline(0, ls=":", lw=1, c="gray")
+ax.axvline(0, ls=":", lw=1, c="gray")
+
+ax.scatter(crt_v.real, crt_v.imag)
+ax.set_aspect(1)
+ax.set_xlabel("Re($\\lambda$)")
+ax.set_ylabel("Im($\\lambda$)")
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="j-URPysj1kC3" outputId="f2033a74-e672-42ed-9f79-f390d3c29ede"
+(
+    torch.max(torch.abs(system.U)),
+    torch.max(torch.abs(system.V)),
+)
+
+# %% [markdown] id="S_e7wGsl2uNv"
+# ### Try learned system on examples
+
+# %% id="fGJUwTIP2uNw"
+torch.manual_seed(1)
+
+test_simulator = PlaceGridMotionSimulator(n, sigma=0.5)
+
+test_n_samples = 10
+test_x = n * torch.rand(test_n_samples)
+test_trajectory = []
+for i in range(test_n_samples):
+    test_simulator.x = test_x[i].item()
+    test_trajectory.append(test_simulator().type(torch.float32))
+
+test_trajectory = torch.stack(test_trajectory)
+
+# %% id="vvgdMJbu2uNw"
+test_moved = system.propagate_place(test_trajectory, 1 * torch.ones(test_n_samples))
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 330} id="3Hgin79U2uNw" outputId="85e60a12-a4e4-4cfa-930b-71b3b9145f7a"
+fig, (ax1, ax2) = plt.subplots(2, 1, constrained_layout=True)
+ax1.imshow(test_trajectory)
+ax1.set_ylabel("time")
+ax1.set_xlabel("position")
+
+ax2.imshow(test_moved.detach().numpy())
+ax2.set_ylabel("time")
+ax2.set_xlabel("position")
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="bXTAXQFV2uNw" outputId="244ea24d-04b0-4d65-c336-6724f5b7e7db"
+[torch.min(torch.abs(system.xi)), torch.max(torch.abs(system.xi))]
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+# crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
+for i, crt_name in enumerate(crt_d):
+    crt_mat = crt_d[crt_name].detach().numpy()
+
+    # crt_mat = crt_mat[:, crt_ordering]
+    # crt_mat = crt_mat[crt_ordering, :]
+
+    crt_lim = np.max(np.abs(crt_mat))
+    
+    ax = axs[i]
+    ax.imshow(crt_mat, vmin=-crt_lim, vmax=crt_lim, cmap="RdBu")
+
+    ax.set_title(crt_name)
+
+# %%
+fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+for i, crt_name in enumerate(crt_d):
+    ax = axs[i]
+    crt_mat = crt_d[crt_name].detach().numpy()
+    crt_lim = np.max(np.abs(crt_mat))
+    for k in range(m):
+        crt_v = crt_mat[:, k]
+        ax.axhline(k, ls=":", c="gray", alpha=0.7)
+        ax.plot(np.arange(n), k + 0.4 * crt_v / crt_lim)
+    
+    ax.set_title(crt_name)
+    sns.despine(ax=ax, offset=10)
+
+# %%
+fig, ax = plt.subplots(figsize=(6, 6))
+crt_u = system.U.detach().numpy()
+crt_vt = system.V.T.detach().numpy()
+crt_lim = max(np.max(np.abs(_)) for _ in [crt_u, crt_vt])
+ax.plot([-crt_lim, crt_lim], [-crt_lim, crt_lim], c="gray", ls=":")
+ax.scatter(crt_u, crt_vt)
+ax.set_xlabel("elements of $U$")
+ax.set_ylabel("elements of $V^\\top$")
+
+ax.set_aspect(1)
+sns.despine(ax=ax, offset=10)
 
 # %% [markdown] id="YiToQ7Nowdeo"
 # ## Check Fourier translation on von-Mises
