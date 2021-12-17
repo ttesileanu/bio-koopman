@@ -32,7 +32,7 @@ from tqdm import tqdm
 
 from training import train, test
 from utils import StepwiseScheduler
-from simple_placesim_1d import PlaceGridMotionSimulator
+from bump_simulator import PlaceGridMotionSimulator
 from naive_model import PlaceGridSystemNonBio
 from naive_model_cplx import PlaceGridSystemNonBioCplx
 
@@ -982,6 +982,450 @@ ax.set_ylabel("elements of $V^\\top$")
 ax.set_aspect(1)
 sns.despine(ax=ax, offset=10)
 
+# %% [markdown] id="euyEHDjR1mOX"
+# ## Test learning with non-Fourier bump movements
+
+# %% id="HjrmlD231kC1"
+torch.manual_seed(0)
+
+n = 8
+simulator = PlaceGridMotionSimulator(n, sigma=0.5, fourier=False)
+
+n_samples = 500_000
+s = torch.normal(torch.zeros(n_samples), 1.0)
+trajectory = simulator.batch(s)
+
+dataset_full = [(trajectory[i], trajectory[i + 1], s[i]) for i in range(n_samples - 1)]
+
+test_size = 1000
+dataset_train = dataset_full[:-test_size]
+dataset_test = dataset_full[-test_size:]
+
+batch_size = 200
+dataloader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size)
+dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 313} id="-tR-EcHK1kC1" outputId="1fcd5faf-b16b-4e69-eaed-d55a633a409b"
+crt_n = 4 * n
+crt_step = 1
+
+fig, (ax1, ax2) = plt.subplots(
+    1, 2, sharey=True, constrained_layout=True, gridspec_kw={"width_ratios": (3, 1)}
+)
+ax1.imshow(trajectory[:crt_n:crt_step])
+ax1.set_ylabel("time")
+ax1.set_xlabel("position")
+
+ax2.barh(width=s[:crt_n:crt_step], y=np.arange(0, crt_n // crt_step))
+ax2.axvline(0, ls=":", c="gray")
+crt_xl = max(ax2.get_xlim())
+ax2.set_xlim(-crt_xl, crt_xl)
+ax2.set_ylim(ax1.get_ylim())
+ax2.invert_yaxis()
+ax2.set_xlabel("shift")
+sns.despine(ax=ax2, left=True)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 288} id="rvSgTAtk1kC2" outputId="bee2a762-51c2-446d-d8c2-6532123224db"
+fig, ax = plt.subplots()
+ax.plot(torch.mean(trajectory, dim=0))
+ax.set_ylim(0, None)
+
+ax.set_xlabel("position")
+ax.set_ylabel("average activation")
+sns.despine(ax=ax, offset=10)
+
+# %% [markdown]
+# ### Real-valued simulation
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="IOhW9zr21kC2" outputId="3afb29ae-c2a7-4137-fc7d-53b3df09b35e"
+torch.manual_seed(0)
+
+m = n - 1
+
+system = PlaceGridSystemNonBio(n, m)
+
+original_U = torch.clone(system.U).detach()
+original_V = torch.clone(system.V).detach()
+original_xi = torch.clone(system.xi).detach()
+original_theta = torch.clone(system.theta).detach()
+
+optimizer = torch.optim.AdamW(system.parameters(), lr=0.01)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.995)
+# scheduler = StepwiseScheduler(
+#     optimizer,
+#     [(100, 0.01), (100, 0.05), (100, 0.03), (300, 0.02), (1600, 0.01), (100, 0.005)]
+# )
+scheduler = None
+train_results = train(
+    system,
+    "cpu",
+    dataloader_train,
+    optimizer,
+    test_set=dataloader_test,
+    test_every=50,
+    scheduler=scheduler,
+)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="JWLExrOc1kC2" outputId="dd0ea4c7-bed1-48fb-faa3-023829028047"
+# scheduler.get_last_lr()
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="a1K3zZ2F1kC2" outputId="1a708ae2-7716-4421-ed10-ba79dc90c237"
+(
+    torch.median(torch.abs(system.U - original_U)),
+    torch.median(torch.abs(system.V - original_V)),
+    torch.median(torch.abs(system.xi - original_xi)),
+    torch.median(torch.abs(system.theta - original_theta)),
+)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 288} id="m6dh_6_31kC3" outputId="1b6bb86a-e4ab-4aea-b33f-19cfed2a70bc"
+fig, ax = plt.subplots()
+ax.semilogy(train_results.train_loss, lw=0.5, label="train")
+ax.semilogy(train_results.test_idxs, train_results.test_loss, lw=1.0, label="test")
+ax.set_xlabel("batch")
+ax.set_ylabel("loss")
+
+ax.axhline(
+    train_results.test_loss[-1],
+    lw=2.0,
+    ls="--",
+    c="C1",
+    label=f"final test loss: {train_results.test_loss[-1]:.2g}"
+)
+
+ax.legend(frameon=False)
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="yZNOnbKV1kC3" outputId="bdecdb0c-381d-4c4c-fcda-75b60678b7e9"
+crt_tensor = (system.U @ system.V).detach().numpy()
+crt_lim = np.max(np.abs(crt_tensor))
+plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
+plt.colorbar()
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 289} id="3sxD_nl21kC3" outputId="729a9946-4aa2-4fb4-c48c-a7b511d1da29"
+fig, ax = plt.subplots()
+crt_rho = (1 / torch.cosh(system.xi)).detach().numpy()
+crt_theta = system.theta.detach().numpy()
+crt_v = crt_rho[:len(crt_theta)] * np.exp(1j * crt_theta)
+if len(crt_rho) > len(crt_theta):
+    crt_v = np.hstack((crt_v, [crt_rho[-1]]))
+
+ax.axhline(0, ls=":", lw=1, c="gray")
+ax.axvline(0, ls=":", lw=1, c="gray")
+
+ax.scatter(crt_v.real, crt_v.imag)
+ax.set_aspect(1)
+ax.set_xlabel("Re($\\lambda$)")
+ax.set_ylabel("Im($\\lambda$)")
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="j-URPysj1kC3" outputId="f2033a74-e672-42ed-9f79-f390d3c29ede"
+(
+    torch.max(torch.abs(system.U)),
+    torch.max(torch.abs(system.V)),
+)
+
+# %% [markdown] id="S_e7wGsl2uNv"
+# ### Try learned system on examples
+
+# %% id="fGJUwTIP2uNw"
+torch.manual_seed(1)
+
+test_simulator = PlaceGridMotionSimulator(n, sigma=0.5)
+
+test_n_samples = 10
+test_x = n * torch.rand(test_n_samples)
+test_trajectory = []
+for i in range(test_n_samples):
+    test_simulator.x = test_x[i].item()
+    test_trajectory.append(test_simulator().type(torch.float32))
+
+test_trajectory = torch.stack(test_trajectory)
+
+# %% id="vvgdMJbu2uNw"
+test_moved = system.propagate_place(test_trajectory, 1 * torch.ones(test_n_samples))
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 330} id="3Hgin79U2uNw" outputId="85e60a12-a4e4-4cfa-930b-71b3b9145f7a"
+fig, (ax1, ax2) = plt.subplots(2, 1, constrained_layout=True)
+ax1.imshow(test_trajectory)
+ax1.set_ylabel("time")
+ax1.set_xlabel("position")
+
+ax2.imshow(test_moved.detach().numpy())
+ax2.set_ylabel("time")
+ax2.set_xlabel("position")
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="bXTAXQFV2uNw" outputId="244ea24d-04b0-4d65-c336-6724f5b7e7db"
+[torch.min(torch.abs(system.xi)), torch.max(torch.abs(system.xi))]
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+# crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
+for i, crt_name in enumerate(crt_d):
+    crt_mat = crt_d[crt_name].detach().numpy()
+
+    # crt_mat = crt_mat[:, crt_ordering]
+    # crt_mat = crt_mat[crt_ordering, :]
+
+    crt_lim = np.max(np.abs(crt_mat))
+    
+    ax = axs[i]
+    ax.imshow(crt_mat, vmin=-crt_lim, vmax=crt_lim, cmap="RdBu")
+
+    ax.set_title(crt_name)
+
+# %%
+fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+for i, crt_name in enumerate(crt_d):
+    ax = axs[i]
+    crt_mat = crt_d[crt_name].detach().numpy()
+    crt_lim = np.max(np.abs(crt_mat))
+    for k in range(m):
+        crt_v = crt_mat[:, k]
+        ax.axhline(k, ls=":", c="gray", alpha=0.7)
+        ax.plot(np.arange(n), k + 0.4 * crt_v / crt_lim)
+    
+    ax.set_title(crt_name)
+    sns.despine(ax=ax, offset=10)
+
+# %%
+fig, ax = plt.subplots(figsize=(6, 6))
+crt_u = system.U.detach().numpy()
+crt_vt = system.V.T.detach().numpy()
+crt_lim = max(np.max(np.abs(_)) for _ in [crt_u, crt_vt])
+ax.plot([-crt_lim, crt_lim], [-crt_lim, crt_lim], c="gray", ls=":")
+ax.scatter(crt_u, crt_vt)
+ax.set_xlabel("elements of $U$")
+ax.set_ylabel("elements of $V^\\top$")
+
+ax.set_aspect(1)
+sns.despine(ax=ax, offset=10)
+
+# %% [markdown] id="euyEHDjR1mOX"
+# ## Test learning with non-periodic bump movements
+
+# %% id="HjrmlD231kC1"
+torch.manual_seed(0)
+
+n = 8
+simulator = PlaceGridMotionSimulator(n, sigma=0.5, fourier=False, periodic=False)
+
+n_samples = 500_000
+s = torch.normal(torch.zeros(n_samples), 1.0)
+trajectory = simulator.batch(s)
+
+dataset_full = [(trajectory[i], trajectory[i + 1], s[i]) for i in range(n_samples - 1)]
+
+test_size = 1000
+dataset_train = dataset_full[:-test_size]
+dataset_test = dataset_full[-test_size:]
+
+batch_size = 200
+dataloader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size)
+dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_size)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 313} id="-tR-EcHK1kC1" outputId="1fcd5faf-b16b-4e69-eaed-d55a633a409b"
+crt_n = 4 * n
+crt_step = 1
+
+fig, (ax1, ax2) = plt.subplots(
+    1, 2, sharey=True, constrained_layout=True, gridspec_kw={"width_ratios": (3, 1)}
+)
+ax1.imshow(trajectory[:crt_n:crt_step])
+ax1.set_ylabel("time")
+ax1.set_xlabel("position")
+
+ax2.barh(width=s[:crt_n:crt_step], y=np.arange(0, crt_n // crt_step))
+ax2.axvline(0, ls=":", c="gray")
+crt_xl = max(ax2.get_xlim())
+ax2.set_xlim(-crt_xl, crt_xl)
+ax2.set_ylim(ax1.get_ylim())
+ax2.invert_yaxis()
+ax2.set_xlabel("shift")
+sns.despine(ax=ax2, left=True)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 288} id="rvSgTAtk1kC2" outputId="bee2a762-51c2-446d-d8c2-6532123224db"
+fig, ax = plt.subplots()
+ax.plot(torch.mean(trajectory, dim=0))
+ax.set_ylim(0, None)
+
+ax.set_xlabel("position")
+ax.set_ylabel("average activation")
+sns.despine(ax=ax, offset=10)
+
+# %% [markdown]
+# ### Real-valued simulation
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="IOhW9zr21kC2" outputId="3afb29ae-c2a7-4137-fc7d-53b3df09b35e"
+torch.manual_seed(0)
+
+m = n - 1
+
+system = PlaceGridSystemNonBio(n, m)
+
+original_U = torch.clone(system.U).detach()
+original_V = torch.clone(system.V).detach()
+original_xi = torch.clone(system.xi).detach()
+original_theta = torch.clone(system.theta).detach()
+
+optimizer = torch.optim.AdamW(system.parameters(), lr=0.01)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.995)
+# scheduler = StepwiseScheduler(
+#     optimizer,
+#     [(100, 0.01), (100, 0.05), (100, 0.03), (300, 0.02), (1600, 0.01), (100, 0.005)]
+# )
+scheduler = None
+train_results = train(
+    system,
+    "cpu",
+    dataloader_train,
+    optimizer,
+    test_set=dataloader_test,
+    test_every=50,
+    scheduler=scheduler,
+)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="JWLExrOc1kC2" outputId="dd0ea4c7-bed1-48fb-faa3-023829028047"
+# scheduler.get_last_lr()
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="a1K3zZ2F1kC2" outputId="1a708ae2-7716-4421-ed10-ba79dc90c237"
+(
+    torch.median(torch.abs(system.U - original_U)),
+    torch.median(torch.abs(system.V - original_V)),
+    torch.median(torch.abs(system.xi - original_xi)),
+    torch.median(torch.abs(system.theta - original_theta)),
+)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 288} id="m6dh_6_31kC3" outputId="1b6bb86a-e4ab-4aea-b33f-19cfed2a70bc"
+fig, ax = plt.subplots()
+ax.semilogy(train_results.train_loss, lw=0.5, label="train")
+ax.semilogy(train_results.test_idxs, train_results.test_loss, lw=1.0, label="test")
+ax.set_xlabel("batch")
+ax.set_ylabel("loss")
+
+ax.axhline(
+    train_results.test_loss[-1],
+    lw=2.0,
+    ls="--",
+    c="C1",
+    label=f"final test loss: {train_results.test_loss[-1]:.2g}"
+)
+
+ax.legend(frameon=False)
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="yZNOnbKV1kC3" outputId="bdecdb0c-381d-4c4c-fcda-75b60678b7e9"
+crt_tensor = (system.U @ system.V).detach().numpy()
+crt_lim = np.max(np.abs(crt_tensor))
+plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
+plt.colorbar()
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 289} id="3sxD_nl21kC3" outputId="729a9946-4aa2-4fb4-c48c-a7b511d1da29"
+fig, ax = plt.subplots()
+crt_rho = (1 / torch.cosh(system.xi)).detach().numpy()
+crt_theta = system.theta.detach().numpy()
+crt_v = crt_rho[:len(crt_theta)] * np.exp(1j * crt_theta)
+if len(crt_rho) > len(crt_theta):
+    crt_v = np.hstack((crt_v, [crt_rho[-1]]))
+
+ax.axhline(0, ls=":", lw=1, c="gray")
+ax.axvline(0, ls=":", lw=1, c="gray")
+
+ax.scatter(crt_v.real, crt_v.imag)
+ax.set_aspect(1)
+ax.set_xlabel("Re($\\lambda$)")
+ax.set_ylabel("Im($\\lambda$)")
+
+sns.despine(ax=ax, offset=10)
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="j-URPysj1kC3" outputId="f2033a74-e672-42ed-9f79-f390d3c29ede"
+(
+    torch.max(torch.abs(system.U)),
+    torch.max(torch.abs(system.V)),
+)
+
+# %% [markdown] id="S_e7wGsl2uNv"
+# ### Try learned system on examples
+
+# %% id="fGJUwTIP2uNw"
+torch.manual_seed(1)
+
+test_simulator = PlaceGridMotionSimulator(n, sigma=0.5)
+
+test_n_samples = 10
+test_x = n * torch.rand(test_n_samples)
+test_trajectory = []
+for i in range(test_n_samples):
+    test_simulator.x = test_x[i].item()
+    test_trajectory.append(test_simulator().type(torch.float32))
+
+test_trajectory = torch.stack(test_trajectory)
+
+# %% id="vvgdMJbu2uNw"
+test_moved = system.propagate_place(test_trajectory, 2 * torch.ones(test_n_samples))
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 330} id="3Hgin79U2uNw" outputId="85e60a12-a4e4-4cfa-930b-71b3b9145f7a"
+fig, (ax1, ax2) = plt.subplots(2, 1, constrained_layout=True)
+ax1.imshow(test_trajectory)
+ax1.set_ylabel("time")
+ax1.set_xlabel("position")
+
+ax2.imshow(test_moved.detach().numpy())
+ax2.set_ylabel("time")
+ax2.set_xlabel("position")
+
+# %% colab={"base_uri": "https://localhost:8080/"} id="bXTAXQFV2uNw" outputId="244ea24d-04b0-4d65-c336-6724f5b7e7db"
+[torch.min(torch.abs(system.xi)), torch.max(torch.abs(system.xi))]
+
+# %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+# crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
+for i, crt_name in enumerate(crt_d):
+    crt_mat = crt_d[crt_name].detach().numpy()
+
+    # crt_mat = crt_mat[:, crt_ordering]
+    # crt_mat = crt_mat[crt_ordering, :]
+
+    crt_lim = np.max(np.abs(crt_mat))
+    
+    ax = axs[i]
+    ax.imshow(crt_mat, vmin=-crt_lim, vmax=crt_lim, cmap="RdBu")
+
+    ax.set_title(crt_name)
+
+# %%
+fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+for i, crt_name in enumerate(crt_d):
+    ax = axs[i]
+    crt_mat = crt_d[crt_name].detach().numpy()
+    crt_lim = np.max(np.abs(crt_mat))
+    for k in range(m):
+        crt_v = crt_mat[:, k]
+        ax.axhline(k, ls=":", c="gray", alpha=0.7)
+        ax.plot(np.arange(n), k + 0.4 * crt_v / crt_lim)
+    
+    ax.set_title(crt_name)
+    sns.despine(ax=ax, offset=10)
+
+# %%
+fig, ax = plt.subplots(figsize=(6, 6))
+crt_u = system.U.detach().numpy()
+crt_vt = system.V.T.detach().numpy()
+crt_lim = max(np.max(np.abs(_)) for _ in [crt_u, crt_vt])
+ax.plot([-crt_lim, crt_lim], [-crt_lim, crt_lim], c="gray", ls=":")
+ax.scatter(crt_u, crt_vt)
+ax.set_xlabel("elements of $U$")
+ax.set_ylabel("elements of $V^\\top$")
+
+ax.set_aspect(1)
+sns.despine(ax=ax, offset=10)
+
 # %% [markdown] id="YiToQ7Nowdeo"
 # ## Check Fourier translation on von-Mises
 
@@ -1056,4 +1500,21 @@ ax.plot(
 # %% colab={"base_uri": "https://localhost:8080/"} id="QPBffJJ85flJ" outputId="3ca36901-1113-4515-cd9c-09c33e745e4b"
 np.max(np.abs(crt_v1 - crt_v1_tgt))
 
-# %% id="Y554o0Ps7LJx"
+# %%
+with dv.FigureManager() as (_, ax):
+    crt_x = np.linspace(-0.5, 16.0)
+    crt_cos = 0.5 * np.cos(crt_x)
+    crt_sin = 0.5 * np.sin(crt_x)
+    
+    for i in range(1, 8):
+        ax.axhline(i, ls=":", lw=0.5, c="gray")
+        
+    ax.plot(crt_x, crt_cos + 7)
+    ax.plot(crt_x, np.clip(crt_cos, 0, None) + 6)
+    ax.plot(crt_x, -np.clip(crt_cos, None, 0) + 5)
+    
+    ax.plot(crt_x, crt_sin + 3)
+    ax.plot(crt_x, np.clip(crt_sin, 0, None) + 2)
+    ax.plot(crt_x, -np.clip(crt_sin, None, 0) + 1)
+
+# %%
