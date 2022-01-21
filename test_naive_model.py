@@ -16,11 +16,11 @@ def test_loss_averages_over_samples():
 
     system = PlaceGridSystemNonBio(n, m)
 
-    all_l = [system.loss(x[[i]], y[[i]], s[[i]]) for i in range(samples)]
+    all_ell = [system.loss(x[[i]], y[[i]], s[[i]]) for i in range(samples)]
 
-    l = system.loss(x, y, s)
+    ell = system.loss(x, y, s)
 
-    assert torch.allclose(l, sum(all_l) / samples)
+    assert torch.allclose(ell, sum(all_ell) / samples)
 
 
 def test_lambda_s_matrix_is_size_m():
@@ -29,8 +29,6 @@ def test_lambda_s_matrix_is_size_m():
     m = 7
     samples = 1
 
-    x = torch.normal(torch.zeros(samples, n))
-    y = x + 0.1 * torch.normal(torch.zeros(samples, n))
     s = torch.normal(torch.zeros(samples))
 
     system = PlaceGridSystemNonBio(n, m)
@@ -46,27 +44,25 @@ def test_lambda_s_matrix_is_block_diagonal():
     m = 7
     samples = 1
 
-    x = torch.normal(torch.zeros(samples, n))
-    y = x + 0.1 * torch.normal(torch.zeros(samples, n))
     s = torch.normal(torch.zeros(samples))
 
     system = PlaceGridSystemNonBio(n, m)
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
-    tzero = torch.FloatTensor([0])
+    t_zero = torch.FloatTensor([0])
     for i in range(0, 2 * (m // 2), 2):
         crt_rows = lbd_s[[i, i + 1], :]
         crt_rows[:, [i, i + 1]] = 0
 
-        assert torch.allclose(crt_rows, tzero)
+        assert torch.allclose(crt_rows, t_zero)
 
         crt_cols = lbd_s[:, [i, i + 1]]
         crt_cols[[i, i + 1], :] = 0
-        assert torch.allclose(crt_cols, tzero)
+        assert torch.allclose(crt_cols, t_zero)
 
-    assert torch.allclose(lbd_s[-1, :-1], tzero)
-    assert torch.allclose(lbd_s[:-1, -1], tzero)
+    assert torch.allclose(lbd_s[-1, :-1], t_zero)
+    assert torch.allclose(lbd_s[:-1, -1], t_zero)
 
 
 def test_lambda_s_2x2_blocks_match_xi_and_theta():
@@ -75,8 +71,6 @@ def test_lambda_s_2x2_blocks_match_xi_and_theta():
     m = 7
     samples = 1
 
-    x = torch.normal(torch.zeros(samples, n))
-    y = x + 0.1 * torch.normal(torch.zeros(samples, n))
     s = torch.normal(torch.zeros(samples))
 
     system = PlaceGridSystemNonBio(n, m)
@@ -101,8 +95,6 @@ def test_lambda_s_diagonal_block_matches_xi():
     m = 7
     samples = 1
 
-    x = torch.normal(torch.zeros(samples, n))
-    y = x + 0.1 * torch.normal(torch.zeros(samples, n))
     s = torch.normal(torch.zeros(samples))
 
     system = PlaceGridSystemNonBio(n, m)
@@ -122,7 +114,6 @@ def test_propagate_place_matches_expectation_multi_sample():
     samples = 3
 
     x = torch.normal(torch.zeros(samples, n))
-    y = x + 0.1 * torch.normal(torch.zeros(samples, n))
     s = torch.normal(torch.zeros(samples))
 
     system = PlaceGridSystemNonBio(n, m)
@@ -172,9 +163,9 @@ def test_u_derivative():
     system = PlaceGridSystemNonBio(n, m)
 
     system.zero_grad()
-    l = system.loss(x, y, s)
+    ell = system.loss(x, y, s)
 
-    l.backward()
+    ell.backward()
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
@@ -200,9 +191,9 @@ def test_v_derivative():
     system = PlaceGridSystemNonBio(n, m)
 
     system.zero_grad()
-    l = system.loss(x, y, s)
+    ell = system.loss(x, y, s)
 
-    l.backward()
+    ell.backward()
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
@@ -228,9 +219,9 @@ def test_xi_derivative_for_1x1_block():
     system = PlaceGridSystemNonBio(n, m)
 
     system.zero_grad()
-    l = system.loss(x, y, s)
+    ell = system.loss(x, y, s)
 
-    l.backward()
+    ell.backward()
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
@@ -240,11 +231,6 @@ def test_xi_derivative_for_1x1_block():
     rho = 1 / torch.cosh(system.xi[-1])
     der_rho = s.item() * rho ** (s.item() - 1)
 
-    # exp_grad_rho_1x1 = (
-    #     -der_rho
-    #     * torch.dot(eps[0], system.V[-1, :] * torch.dot(system.U[:, -1], x[0]))
-    #     / n
-    # )
     exp_grad_rho_1x1 = (
         -der_rho
         * torch.dot(eps[0], system.V[:, -1] * torch.dot(system.U[-1, :], x[0]))
@@ -269,9 +255,9 @@ def test_xi_derivative_for_2x2_block():
     system = PlaceGridSystemNonBio(n, m)
 
     system.zero_grad()
-    l = system.loss(x, y, s)
+    ell = system.loss(x, y, s)
 
-    l.backward()
+    ell.backward()
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
@@ -303,9 +289,9 @@ def test_theta_derivative_for_2x2_block():
     system = PlaceGridSystemNonBio(n, m)
 
     system.zero_grad()
-    l = system.loss(x, y, s)
+    ell = system.loss(x, y, s)
 
-    l.backward()
+    ell.backward()
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
@@ -318,9 +304,6 @@ def test_theta_derivative_for_2x2_block():
     ss = torch.sin(theta)
     der_lbd_s = s.item() * rho ** s * torch.FloatTensor([[-ss, -cc], [cc, -ss]])
 
-    # exp_grad_theta_2x2 = (
-    #     -torch.dot(eps[0], x[0] @ system.U[:, :2] @ der_lbd_s @ system.V[:2, :]) / n
-    # )
     exp_grad_theta_2x2 = (
         -torch.dot(eps[0], system.V[:, :2] @ der_lbd_s @ system.U[:2, :] @ x[0]) / n
     )
