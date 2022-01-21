@@ -41,16 +41,18 @@ def test_u_derivative():
 
     ell.backward()
 
-    # lbd_s_mat = torch.diag(system.lbd) ** s[:, None, None]
-    lbd_s_mat = torch.stack([torch.diag(system.lbd ** _) for _ in s])
-    y_pred = (x + 0j) @ system.U @ lbd_s_mat @ system.V
-    eps = (y - y_pred)[0]
+    lbd_s_mat = torch.diag(system.lbd ** s[0])
+    y_pred = system.V @ lbd_s_mat @ system.U @ (x[0] + 0j)
+    eps = y[0] - y_pred
 
     assert torch.allclose(
         torch.imag(eps), torch.FloatTensor([0]), atol=1e-7
     ), "eps complex?"
 
-    exp_grad_u = -(x + 0j).T @ eps @ system.V.T.conj() @ lbd_s_mat[0].conj() / n
+    exp_grad_u = (
+        -(lbd_s_mat.conj() @ system.V.T.conj() @ eps[:, None] @ (x[0] + 0j)[None, :])
+        / n
+    )
 
     assert torch.allclose(system.U.grad, exp_grad_u)
 
@@ -73,14 +75,15 @@ def test_v_derivative():
 
     ell.backward()
 
-    # lbd_s_mat = torch.diag(system.lbd) ** s[:, None, None]
-    lbd_s_mat = torch.stack([torch.diag(system.lbd ** _) for _ in s])
-    y_pred = (x + 0j) @ system.U @ lbd_s_mat @ system.V
-    eps = (y - y_pred)[0]
+    lbd_s_mat = torch.diag(system.lbd ** s[0])
+    y_pred = system.V @ lbd_s_mat @ system.U @ (x[0] + 0j)
+    eps = y[0] - y_pred
 
     assert torch.allclose(torch.imag(eps), torch.FloatTensor([0])), "eps complex?"
 
-    exp_grad_v = -lbd_s_mat.conj() @ system.U.T.conj() @ (x + 0j).T @ eps / n
+    exp_grad_v = (
+        -eps[:, None] @ (x[0] + 0j)[None, :] @ system.U.T.conj() @ lbd_s_mat.conj() / n
+    )
 
     assert torch.allclose(system.V.grad, exp_grad_v)
 
@@ -103,15 +106,18 @@ def test_lbd_derivative():
 
     ell.backward()
 
-    # lbd_s_mat = torch.diag(system.lbd) ** s[:, None, None]
-    lbd_s_mat = torch.stack([torch.diag(system.lbd ** _) for _ in s])
-    y_pred = (x + 0j) @ system.U @ lbd_s_mat @ system.V
-    eps = (y - y_pred)[0]
+    lbd_s_mat = torch.diag(system.lbd ** s[0])
+    y_pred = system.V @ lbd_s_mat @ system.U @ (x[0] + 0j)
+    eps = y[0] - y_pred
 
     assert torch.allclose(torch.imag(eps), torch.FloatTensor([0])), "eps complex?"
 
-    exp_grad_lbd = -s[0] * (system.lbd ** (s[0] - 1)).conj() * torch.diag(
-        system.V @ eps.T @ (x + 0j) @ system.U).conj() / n
+    exp_grad_lbd = (
+        -s[0]
+        * (system.lbd ** (s[0] - 1)).conj()
+        * torch.diag(system.U @ (x[0] + 0j)[:, None] @ eps[None, :] @ system.V).conj()
+        / n
+    )
 
     assert torch.allclose(system.lbd.grad, exp_grad_lbd)
 
@@ -134,15 +140,14 @@ def test_lbd_derivative_again():
 
     ell.backward()
 
-    g = (x + 0j) @ system.U
-    lbd_s_mat = torch.stack([torch.diag(system.lbd ** _) for _ in s])
-    y_pred = g @ lbd_s_mat @ system.V
-    eps = (y - y_pred)[0]
+    lbd_s_mat = torch.diag(system.lbd ** s[0])
+    y_pred = system.V @ lbd_s_mat @ system.U @ (x[0] + 0j)
+    eps = y[0] - y_pred
 
     assert torch.allclose(torch.imag(eps), torch.FloatTensor([0])), "eps complex?"
 
-    vt_eps = eps @ system.V.T.conj()
-
-    exp_grad_lbd = -s[0] * (system.lbd ** (s[0] - 1) * g).conj() * vt_eps / n
+    g = (system.U @ (x[0] + 0j)[:, None]).squeeze()
+    vt_eps = (eps[None, :] @ system.V).squeeze()
+    exp_grad_lbd = -s[0] * (system.lbd ** (s[0] - 1) * g * vt_eps).conj() / n
 
     assert torch.allclose(system.lbd.grad, exp_grad_lbd)

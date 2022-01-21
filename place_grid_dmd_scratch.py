@@ -184,10 +184,10 @@ plt.imshow(np.vstack((x, y, y_pred)))
 
 # %% id="-aND72Nj-MGy"
 test_system = PlaceGridSystemNonBioCplx(n, n - 1)
-sys_U_torch = torch.from_numpy(np.copy(crt_fourier_V.T)).type(torch.complex64)
-sys_V_torch = torch.from_numpy(np.copy(crt_fourier_U.T)).type(torch.complex64)
-test_system.U = torch.hstack((sys_U_torch[:, : n // 2], sys_U_torch[:, n // 2 + 1 :]))
-test_system.V = torch.vstack((sys_V_torch[: n // 2, :], sys_V_torch[n // 2 + 1 :, :]))
+sys_U_torch = torch.from_numpy(np.copy(crt_fourier_V)).type(torch.complex64)
+sys_V_torch = torch.from_numpy(np.copy(crt_fourier_U)).type(torch.complex64)
+test_system.U = torch.vstack((sys_U_torch[: n // 2, :], sys_U_torch[n // 2 + 1 :, :]))
+test_system.V = torch.hstack((sys_V_torch[:, : n // 2], sys_V_torch[:, n // 2 + 1 :]))
 
 crt_lbd = torch.exp(-(2j * np.pi / n) * torch.arange(n))
 test_system.lbd = torch.hstack((crt_lbd[: n // 2], crt_lbd[n // 2 + 1 :]))
@@ -202,8 +202,8 @@ crt_order = torch.hstack(
         ).T.ravel(),
     )
 )
-test_system.U = test_system.U[:, crt_order]
-test_system.V = test_system.V[crt_order, :]
+test_system.U = test_system.U[crt_order, :]
+test_system.V = test_system.V[:, crt_order]
 test_system.lbd = test_system.lbd[crt_order]
 
 crt_scores = []
@@ -375,7 +375,7 @@ ax.legend(frameon=False)
 sns.despine(ax=ax, offset=10)
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="4_FpjTeD2OI3" outputId="365616d6-9602-46f3-c09a-c74b877a8f01"
-crt_tensor = torch.real(system.U @ system.V).detach().numpy()
+crt_tensor = torch.real(system.V @ system.U).detach().numpy()
 crt_lim = np.max(np.abs(crt_tensor))
 plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
 plt.colorbar()
@@ -435,7 +435,7 @@ ax2.set_xlabel("position")
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="1DkYy5qgengL" outputId="1f3ae84d-d483-4b7d-8813-be3e25a7e2e0"
 fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-crt_d = {"U": system.U, "V": system.V.T}
+crt_d = {"U": system.U.T, "V": system.V}
 crt_ordering = np.argsort(np.abs(np.angle(system.lbd.detach().numpy())))
 for i, crt_name in enumerate(crt_d):
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -733,7 +733,7 @@ ax.legend(frameon=False)
 sns.despine(ax=ax, offset=10)
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="yZNOnbKV1kC3" outputId="bdecdb0c-381d-4c4c-fcda-75b60678b7e9"
-crt_tensor = torch.real(system.U @ system.V).detach().numpy()
+crt_tensor = torch.real(system.V @ system.U).detach().numpy()
 crt_lim = np.max(np.abs(crt_tensor))
 plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
 plt.colorbar()
@@ -793,7 +793,7 @@ ax2.set_xlabel("position")
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
 fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-crt_d = {"U": system.U, "V": system.V.T}
+crt_d = {"U": system.U.T, "V": system.V}
 crt_ordering = np.argsort(np.abs(np.angle(system.lbd.detach().numpy())))
 for i, crt_name in enumerate(crt_d):
     crt_mat = crt_d[crt_name].detach().numpy()

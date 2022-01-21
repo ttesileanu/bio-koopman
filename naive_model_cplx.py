@@ -23,11 +23,11 @@ class PlaceGridSystemNonBioCplx:
         rnd_scale = 0.1
 
         m_half = m // 2
-        U_half = torch.eye(n, m_half) + rnd_scale * torch.view_as_complex(
-            torch.normal(torch.zeros(n, m_half, 2))
-        )
-        V_half = torch.eye(m_half, n) + rnd_scale * torch.view_as_complex(
+        U_half = torch.eye(m_half, n) + rnd_scale * torch.view_as_complex(
             torch.normal(torch.zeros(m_half, n, 2))
+        )
+        V_half = torch.eye(n, m_half) + rnd_scale * torch.view_as_complex(
+            torch.normal(torch.zeros(n, m_half, 2))
         )
         lbd_half = 1 + rnd_scale * torch.view_as_complex(
             torch.normal(torch.zeros(m_half, 2))
@@ -35,14 +35,14 @@ class PlaceGridSystemNonBioCplx:
 
         # the largest even number smaller equal to m
         me = 2 * m_half
-        self.U = torch.stack((U_half, U_half.conj()), dim=2).view(n, me).contiguous()
-        self.V = torch.stack((V_half, V_half.conj()), dim=1).view(me, n).contiguous()
+        self.U = torch.stack((U_half, U_half.conj()), dim=1).view(me, n).contiguous()
+        self.V = torch.stack((V_half, V_half.conj()), dim=2).view(n, me).contiguous()
         self.lbd = torch.stack((lbd_half, lbd_half.conj()), dim=1).view(me).contiguous()
 
         if m % 2 == 1:
             # add the real eigenvalue & eigenvector
-            self.U = torch.hstack((torch.normal(torch.zeros(n, 1)), self.U))
-            self.V = torch.vstack((torch.normal(torch.zeros(1, n)), self.V))
+            self.U = torch.vstack((torch.normal(torch.zeros(1, n)), self.U))
+            self.V = torch.hstack((torch.normal(torch.zeros(n, 1)), self.V))
             self.lbd = torch.hstack((torch.FloatTensor([1.0]), self.lbd))
 
         self.U.requires_grad = True
@@ -57,7 +57,7 @@ class PlaceGridSystemNonBioCplx:
         :param x: tensor to transform; first dimension: batch index
         :return: transformed tensor
         """
-        return (x + 0j) @ self.U
+        return (self.U @ (x[..., None] + 0j))[..., 0]
 
     def from_grid(
         self, z: torch.Tensor, atol=1e-4, rtol=1e-2, return_real: bool = True
@@ -77,7 +77,7 @@ class PlaceGridSystemNonBioCplx:
         :param return_real: if `False`, it returns the full, complex-valued tensor
         :return: transformed tensor
         """
-        y_pred = z @ self.V
+        y_pred = (self.V @ z[..., None])[..., 0]
 
         if return_real:
             max_abs_imag = torch.max(torch.abs(torch.imag(y_pred)))
@@ -174,32 +174,32 @@ class PlaceGridSystemNonBioCplx:
         """
         i0 = self.m % 2
         assert torch.allclose(
-            self.U[:, i0::2], self.U[:, i0 + 1 :: 2].conj(), atol=atol
+            self.U[i0::2, :], self.U[i0 + 1 :: 2, :].conj(), atol=atol
         )
         assert torch.allclose(
-            self.V[i0::2, :], self.V[i0 + 1 :: 2, :].conj(), atol=atol
+            self.V[:, i0::2], self.V[:, i0 + 1 :: 2].conj(), atol=atol
         )
         assert torch.allclose(self.lbd[i0::2], self.lbd[i0 + 1 :: 2].conj(), atol=atol)
 
         with torch.no_grad():
-            U_half = 0.5 * (self.U[:, i0::2] + self.U[:, i0 + 1 :: 2].conj())
-            V_half = 0.5 * (self.V[i0::2, :] + self.V[i0 + 1 :: 2, :].conj())
+            U_half = 0.5 * (self.U[i0::2, :] + self.U[i0 + 1 :: 2, :].conj())
+            V_half = 0.5 * (self.V[:, i0::2] + self.V[:, i0 + 1 :: 2].conj())
             lbd_half = 0.5 * (self.lbd[i0::2] + self.lbd[i0 + 1 :: 2].conj())
 
             me = 2 * (self.m // 2)
 
             n = self.n
-            self.U[:, i0:] = torch.stack((U_half, U_half.conj()), dim=2).view(n, me)
-            self.V[i0:, :] = torch.stack((V_half, V_half.conj()), dim=1).view(me, n)
+            self.U[i0:, :] = torch.stack((U_half, U_half.conj()), dim=1).view(me, n)
+            self.V[:, i0:] = torch.stack((V_half, V_half.conj()), dim=2).view(n, me)
             self.lbd[i0:] = torch.stack((lbd_half, lbd_half.conj()), dim=1).view(me)
 
             if self.m % 2 == 1:
-                assert torch.max(torch.abs(self.U[:, 0].imag)) <= atol
-                assert torch.max(torch.abs(self.V[0, :].imag)) <= atol
+                assert torch.max(torch.abs(self.U[0, :].imag)) <= atol
+                assert torch.max(torch.abs(self.V[:, 0].imag)) <= atol
                 assert torch.abs(self.lbd[0].imag) <= atol
 
-                self.U[:, 0] = self.U[:, 0].real.clone()
-                self.V[0, :] = self.V[0, :].real.clone()
+                self.U[0, :] = self.U[0, :].real.clone()
+                self.V[:, 0] = self.V[:, 0].real.clone()
                 self.lbd[0] = self.lbd[0].real.clone()
 
                 if self.lbd[0].real < 0:
