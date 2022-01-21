@@ -5,7 +5,7 @@ import torch
 
 
 class PlaceGridSystemNonBio:
-    """ A real-valued, non-biological implementation of our place&grid cell system.
+    """A real-valued, non-biological implementation of our place&grid cell system.
 
     Attributes
     ==========
@@ -37,7 +37,7 @@ class PlaceGridSystemNonBio:
     """
 
     def __init__(self, n: int, m: int):
-        """ Initialize the system.
+        """Initialize the system.
 
         :param n: number of place cells
         :param m: number of grid cells
@@ -59,7 +59,7 @@ class PlaceGridSystemNonBio:
         self.theta.requires_grad = True
 
     def to_grid(self, x: torch.Tensor) -> torch.Tensor:
-        """ Convert batch of inputs to grid basis.
+        """Convert batch of inputs to grid basis.
 
         This multiplies by `U`.
 
@@ -69,7 +69,7 @@ class PlaceGridSystemNonBio:
         return (self.U @ x[..., None])[..., 0]
 
     def from_grid(self, z: torch.Tensor) -> torch.Tensor:
-        """ Convert batch of grid responses to place basis.
+        """Convert batch of grid responses to place basis.
 
         This multiplies by `V`.
 
@@ -80,7 +80,7 @@ class PlaceGridSystemNonBio:
         return y_pred
 
     def propagate_grid(self, z: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
-        """ Propagate forward in time in grid basis.
+        """Propagate forward in time in grid basis.
 
         This multiplies by `Lambda ** s`, where `Lambda ** s` is calculated by
         `self.get_lambda_s_matrix`.
@@ -98,7 +98,7 @@ class PlaceGridSystemNonBio:
         return torch.vstack(z_prop_lst)
 
     def propagate_place(self, x: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
-        """ Propagate forward in time in place basis.
+        """Propagate forward in time in place basis.
 
         :param x: tensor to propagate forward in time; first dimension: batch index
         :param s: amount by which to propagate
@@ -107,7 +107,7 @@ class PlaceGridSystemNonBio:
         return self.from_grid(self.propagate_grid(self.to_grid(x), s))
 
     def loss(self, x: torch.Tensor, y: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
-        """ Calculate quadratic loss on a batch of input, outputs, and controls.
+        """Calculate quadratic loss on a batch of input, outputs, and controls.
 
         First dimension: batch index.
 
@@ -120,41 +120,43 @@ class PlaceGridSystemNonBio:
         return 0.5 * torch.mean((y - y_pred) ** 2)
 
     def parameters(self) -> list:
-        """ Get list of parameters that are being optimized. """
+        """Get list of parameters that are being optimized."""
         return [self.U, self.V, self.xi, self.theta]
 
     def zero_grad(self):
-        """ Set gradients of all parameters to zero. """
+        """Set gradients of all parameters to zero."""
         for param in self.parameters():
             if param.grad is not None:
                 param.grad.zero_()
 
     def to(self, device: torch.device) -> "PlaceGridSystemNonBio":
-        """ Send all parameters to the given device. """
+        """Send all parameters to the given device."""
         for param in self.parameters():
             param.to(device)
 
         return self
 
     def train(self):
-        """ Set model to training mode. (Does nothing for now). """
+        """Set model to training mode. (Does nothing for now)."""
         pass
 
     def eval(self):
-        """ Set model to evaluation (test) mode. (Does nothing for now). """
+        """Set model to evaluation (test) mode. (Does nothing for now)."""
         pass
 
     @staticmethod
     def _get_lambda_from_parts(rho: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        xs = rho[:len(theta)] * torch.cos(theta)
-        ys = rho[:len(theta)] * torch.sin(theta)
+        xs = rho[: len(theta)] * torch.cos(theta)
+        ys = rho[: len(theta)] * torch.sin(theta)
 
         blocks = []
         for i in range(len(theta)):
-            crt_block = torch.vstack((
-                torch.hstack((xs[i], -ys[i])),
-                torch.hstack((ys[i], xs[i])),
-            ))
+            crt_block = torch.vstack(
+                (
+                    torch.hstack((xs[i], -ys[i])),
+                    torch.hstack((ys[i], xs[i])),
+                )
+            )
             blocks.append(crt_block)
 
         if len(rho) > len(theta):
@@ -163,7 +165,7 @@ class PlaceGridSystemNonBio:
         return torch.block_diag(*blocks)
 
     def get_lambda_s_matrix(self, s: torch.Tensor) -> torch.Tensor:
-        """ Generate the matrix that propagates grid cells forward.
+        """Generate the matrix that propagates grid cells forward.
 
         If `self.m % 2 == 0`, this is a block-diagonal matrix made up of 2x2 blocks
             rho ** s * [[cos(s * theta), -sin(s * theta)],

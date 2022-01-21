@@ -322,7 +322,7 @@ def test_theta_derivative_for_2x2_block():
     #     -torch.dot(eps[0], x[0] @ system.U[:, :2] @ der_lbd_s @ system.V[:2, :]) / n
     # )
     exp_grad_theta_2x2 = (
-            -torch.dot(eps[0], system.V[:, :2] @ der_lbd_s @ system.U[:2, :] @ x[0]) / n
+        -torch.dot(eps[0], system.V[:, :2] @ der_lbd_s @ system.U[:2, :] @ x[0]) / n
     )
 
     assert torch.allclose(system.theta.grad[0], exp_grad_theta_2x2)
