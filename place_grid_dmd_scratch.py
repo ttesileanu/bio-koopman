@@ -515,7 +515,7 @@ ax.legend(frameon=False)
 sns.despine(ax=ax, offset=10)
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="4_FpjTeD2OI3" outputId="365616d6-9602-46f3-c09a-c74b877a8f01"
-crt_tensor = (system.U @ system.V).detach().numpy()
+crt_tensor = (system.V @ system.U).detach().numpy()
 crt_lim = np.max(np.abs(crt_tensor))
 plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
 plt.colorbar()
@@ -579,7 +579,7 @@ ax2.set_xlabel("position")
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="1DkYy5qgengL" outputId="1f3ae84d-d483-4b7d-8813-be3e25a7e2e0"
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 # crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
 for i, crt_name in enumerate(crt_d):
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -617,7 +617,7 @@ ax.plot(tmp.detach().numpy())
 ax.plot(tmp_back.detach().numpy())
 
 # %%
-plt.imshow(system.U.detach().numpy())
+plt.imshow(system.V.detach().numpy())
 plt.colorbar()
 
 # %% [markdown] id="euyEHDjR1mOX"
@@ -939,7 +939,7 @@ ax2.set_xlabel("position")
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 # crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
 for i, crt_name in enumerate(crt_d):
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -956,7 +956,7 @@ for i, crt_name in enumerate(crt_d):
 
 # %%
 fig, axs = plt.subplots(1, 2, figsize=(12, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 for i, crt_name in enumerate(crt_d):
     ax = axs[i]
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -971,13 +971,13 @@ for i, crt_name in enumerate(crt_d):
 
 # %%
 fig, ax = plt.subplots(figsize=(6, 6))
-crt_u = system.U.detach().numpy()
-crt_vt = system.V.T.detach().numpy()
+crt_u = system.U.T.detach().numpy()
+crt_vt = system.V.detach().numpy()
 crt_lim = max(np.max(np.abs(_)) for _ in [crt_u, crt_vt])
 ax.plot([-crt_lim, crt_lim], [-crt_lim, crt_lim], c="gray", ls=":")
 ax.scatter(crt_u, crt_vt)
-ax.set_xlabel("elements of $U$")
-ax.set_ylabel("elements of $V^\\top$")
+ax.set_xlabel("elements of $U^\\top$")
+ax.set_ylabel("elements of $V$")
 
 ax.set_aspect(1)
 sns.despine(ax=ax, offset=10)
@@ -1097,7 +1097,7 @@ ax.legend(frameon=False)
 sns.despine(ax=ax, offset=10)
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="yZNOnbKV1kC3" outputId="bdecdb0c-381d-4c4c-fcda-75b60678b7e9"
-crt_tensor = (system.U @ system.V).detach().numpy()
+crt_tensor = (system.V @ system.U).detach().numpy()
 crt_lim = np.max(np.abs(crt_tensor))
 plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
 plt.colorbar()
@@ -1161,7 +1161,7 @@ ax2.set_xlabel("position")
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 # crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
 for i, crt_name in enumerate(crt_d):
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -1178,7 +1178,7 @@ for i, crt_name in enumerate(crt_d):
 
 # %%
 fig, axs = plt.subplots(1, 2, figsize=(12, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 for i, crt_name in enumerate(crt_d):
     ax = axs[i]
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -1193,13 +1193,13 @@ for i, crt_name in enumerate(crt_d):
 
 # %%
 fig, ax = plt.subplots(figsize=(6, 6))
-crt_u = system.U.detach().numpy()
-crt_vt = system.V.T.detach().numpy()
+crt_u = system.U.T.detach().numpy()
+crt_vt = system.V.detach().numpy()
 crt_lim = max(np.max(np.abs(_)) for _ in [crt_u, crt_vt])
 ax.plot([-crt_lim, crt_lim], [-crt_lim, crt_lim], c="gray", ls=":")
 ax.scatter(crt_u, crt_vt)
-ax.set_xlabel("elements of $U$")
-ax.set_ylabel("elements of $V^\\top$")
+ax.set_xlabel("elements of $U^\\top$")
+ax.set_ylabel("elements of $V$")
 
 ax.set_aspect(1)
 sns.despine(ax=ax, offset=10)
@@ -1319,7 +1319,7 @@ ax.legend(frameon=False)
 sns.despine(ax=ax, offset=10)
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 282} id="yZNOnbKV1kC3" outputId="bdecdb0c-381d-4c4c-fcda-75b60678b7e9"
-crt_tensor = (system.U @ system.V).detach().numpy()
+crt_tensor = (system.V @ system.U).detach().numpy()
 crt_lim = np.max(np.abs(crt_tensor))
 plt.imshow(crt_tensor, cmap="RdBu", vmin=-crt_lim, vmax=crt_lim)
 plt.colorbar()
@@ -1383,7 +1383,7 @@ ax2.set_xlabel("position")
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 622} id="BAv-pYnS2uNw" outputId="99bdcf06-266d-4f66-ec69-61d46c41a3b8"
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 # crt_ordering = np.argsort(np.abs(system.theta.detach().numpy()))
 for i, crt_name in enumerate(crt_d):
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -1400,7 +1400,7 @@ for i, crt_name in enumerate(crt_d):
 
 # %%
 fig, axs = plt.subplots(1, 2, figsize=(12, 4))
-crt_d = {"$U$": system.U, "$V^\\top$": system.V.T}
+crt_d = {"$U^\\top$": system.U.T, "$V$": system.V}
 for i, crt_name in enumerate(crt_d):
     ax = axs[i]
     crt_mat = crt_d[crt_name].detach().numpy()
@@ -1420,8 +1420,8 @@ crt_vt = system.V.T.detach().numpy()
 crt_lim = max(np.max(np.abs(_)) for _ in [crt_u, crt_vt])
 ax.plot([-crt_lim, crt_lim], [-crt_lim, crt_lim], c="gray", ls=":")
 ax.scatter(crt_u, crt_vt)
-ax.set_xlabel("elements of $U$")
-ax.set_ylabel("elements of $V^\\top$")
+ax.set_xlabel("elements of $U^\\top$")
+ax.set_ylabel("elements of $V$")
 
 ax.set_aspect(1)
 sns.despine(ax=ax, offset=10)

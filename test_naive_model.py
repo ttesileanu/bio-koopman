@@ -132,7 +132,7 @@ def test_propagate_place_matches_expectation_multi_sample():
     for i in range(samples):
         crt_lbd_s = system.get_lambda_s_matrix(s[i].item())
         crt_x = x[i]
-        crt_y_hat_exp = crt_x @ system.U @ crt_lbd_s @ system.V
+        crt_y_hat_exp = (system.V @ crt_lbd_s @ system.U @ crt_x[..., None])[..., 0]
         y_hat_exp[i] = crt_y_hat_exp
 
     assert torch.allclose(y_hat, y_hat_exp)
@@ -178,10 +178,10 @@ def test_u_derivative():
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
-    y_pred = x @ system.U @ lbd_s @ system.V
+    y_pred = (system.V @ lbd_s @ system.U @ x[..., None])[..., 0]
     eps = y - y_pred
 
-    exp_grad_u = -x.T @ eps @ system.V.T @ lbd_s.T / n
+    exp_grad_u = -lbd_s.T @ system.V.T @ eps.T @ x / n
 
     assert torch.allclose(system.U.grad, exp_grad_u)
 
@@ -206,10 +206,10 @@ def test_v_derivative():
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
-    y_pred = x @ system.U @ lbd_s @ system.V
+    y_pred = (system.V @ lbd_s @ system.U @ x[..., None])[..., 0]
     eps = y - y_pred
 
-    exp_grad_v = -lbd_s.T @ system.U.T @ x.T @ eps / n
+    exp_grad_v = -eps.T @ x @ system.U.T @ lbd_s.T / n
 
     assert torch.allclose(system.V.grad, exp_grad_v)
 
@@ -234,15 +234,20 @@ def test_xi_derivative_for_1x1_block():
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
-    y_pred = x @ system.U @ lbd_s @ system.V
+    y_pred = (system.V @ lbd_s @ system.U @ x[..., None])[..., 0]
     eps = y - y_pred
 
     rho = 1 / torch.cosh(system.xi[-1])
     der_rho = s.item() * rho ** (s.item() - 1)
 
+    # exp_grad_rho_1x1 = (
+    #     -der_rho
+    #     * torch.dot(eps[0], system.V[-1, :] * torch.dot(system.U[:, -1], x[0]))
+    #     / n
+    # )
     exp_grad_rho_1x1 = (
         -der_rho
-        * torch.dot(eps[0], system.V[-1, :] * torch.dot(system.U[:, -1], x[0]))
+        * torch.dot(eps[0], system.V[:, -1] * torch.dot(system.U[-1, :], x[0]))
         / n
     )
     exp_grad_xi_1x1 = -exp_grad_rho_1x1 * rho ** 2 * torch.sinh(system.xi[-1])
@@ -270,14 +275,14 @@ def test_xi_derivative_for_2x2_block():
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
-    y_pred = x @ system.U @ lbd_s @ system.V
+    y_pred = (system.V @ lbd_s @ system.U @ x[..., None])[..., 0]
     eps = y - y_pred
 
     rho = 1 / torch.cosh(system.xi[0])
     der_lbd_s = s.item() * lbd_s[:2, :2] / rho
 
     exp_grad_rho_2x2 = (
-        -torch.dot(eps[0], x[0] @ system.U[:, :2] @ der_lbd_s @ system.V[:2, :]) / n
+        -torch.dot(eps[0], system.V[:, :2] @ der_lbd_s @ system.U[:2, :] @ x[0]) / n
     )
     exp_grad_xi_2x2 = -exp_grad_rho_2x2 * rho ** 2 * torch.sinh(system.xi[0])
 
@@ -304,7 +309,7 @@ def test_theta_derivative_for_2x2_block():
 
     lbd_s = system.get_lambda_s_matrix(s.item())
 
-    y_pred = x @ system.U @ lbd_s @ system.V
+    y_pred = (system.V @ lbd_s @ system.U @ x[..., None])[..., 0]
     eps = y - y_pred
 
     rho = 1 / torch.cosh(system.xi[0])
@@ -313,8 +318,11 @@ def test_theta_derivative_for_2x2_block():
     ss = torch.sin(theta)
     der_lbd_s = s.item() * rho ** s * torch.FloatTensor([[-ss, -cc], [cc, -ss]])
 
+    # exp_grad_theta_2x2 = (
+    #     -torch.dot(eps[0], x[0] @ system.U[:, :2] @ der_lbd_s @ system.V[:2, :]) / n
+    # )
     exp_grad_theta_2x2 = (
-        -torch.dot(eps[0], x[0] @ system.U[:, :2] @ der_lbd_s @ system.V[:2, :]) / n
+            -torch.dot(eps[0], system.V[:, :2] @ der_lbd_s @ system.U[:2, :] @ x[0]) / n
     )
 
     assert torch.allclose(system.theta.grad[0], exp_grad_theta_2x2)

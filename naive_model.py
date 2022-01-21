@@ -13,13 +13,13 @@ class PlaceGridSystemNonBio:
         number of place and grid cells, respectively
     U, V: torch.Tensor
         arrays defining the conversion from place to grid cells and from grid to place
-        cells, respectively; shapes (n, m) and (m, n), respectively
+        cells, respectively; shapes (m, n) and (n, m), respectively
     xi, theta: torch.Tensor
         arrays defining the dynamics in grid space; see below. shapes ((m + 1) // 2,)
         and (m // 2,), respectively
 
     More specifically, a shift of magnitude s is implemented by the transformation
-            x @ U @ L ** s @ V ,
+            V @ L ** s @ U @ x ,
     where x is the input sample, and L is a block-diagonal matrix whose entries are set
     by xi and theta.
 
@@ -47,8 +47,8 @@ class PlaceGridSystemNonBio:
 
         rnd_scale = 0.1
 
-        self.U = torch.eye(n, m) + rnd_scale * torch.randn(n, m)
-        self.V = torch.eye(m, n) + rnd_scale * torch.randn(m, n)
+        self.U = torch.eye(m, n) + rnd_scale * torch.randn(m, n)
+        self.V = torch.eye(n, m) + rnd_scale * torch.randn(n, m)
 
         self.xi = rnd_scale * torch.randn((m + 1) // 2)
         self.theta = rnd_scale * torch.randn(m // 2)
@@ -66,7 +66,7 @@ class PlaceGridSystemNonBio:
         :param x: tensor to transform; first dimension: batch index
         :return: transformed tensor
         """
-        return x @ self.U
+        return (self.U @ x[..., None])[..., 0]
 
     def from_grid(self, z: torch.Tensor) -> torch.Tensor:
         """ Convert batch of grid responses to place basis.
@@ -76,7 +76,7 @@ class PlaceGridSystemNonBio:
         :param z: tensor to transform; first dimension: batch index
         :return: transformed tensor
         """
-        y_pred = z @ self.V
+        y_pred = (self.V @ z[..., None])[..., 0]
         return y_pred
 
     def propagate_grid(self, z: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
@@ -92,7 +92,7 @@ class PlaceGridSystemNonBio:
         z_prop_lst = []
         for crt_z, crt_s in zip(z, s):
             crt_grid_prop = self.get_lambda_s_matrix(crt_s)
-            crt_z_prop = crt_z @ crt_grid_prop
+            crt_z_prop = crt_grid_prop @ crt_z
             z_prop_lst.append(crt_z_prop)
 
         return torch.vstack(z_prop_lst)
