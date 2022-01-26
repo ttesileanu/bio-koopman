@@ -1,6 +1,6 @@
 import torch
 
-from naive_model import PlaceGridSystemNonBio
+from neurodmd.naive_model import PlaceGridSystemNonBio
 
 
 def test_loss_averages_over_samples():

@@ -3,7 +3,7 @@ import pytest
 import torch
 
 from types import SimpleNamespace
-from multi_model import PlaceGridMultiNonBio
+from neurodmd.multi_model import PlaceGridMultiNonBio
 
 
 @pytest.fixture

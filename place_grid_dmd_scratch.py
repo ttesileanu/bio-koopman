@@ -30,11 +30,11 @@ import numpy as np
 
 from tqdm import tqdm
 
-from training import train, test
-from utils import StepwiseScheduler
-from bump_simulator import PlaceGridMotionSimulator
-from naive_model import PlaceGridSystemNonBio
-from naive_model_cplx import PlaceGridSystemNonBioCplx
+from neurodmd.training import train, test
+from neurodmd.utils import StepwiseScheduler
+from neurodmd.bump_simulator import PlaceGridMotionSimulator
+from neurodmd.naive_model import PlaceGridSystemNonBio
+from neurodmd.naive_model_cplx import PlaceGridSystemNonBioCplx
 
 # %% [markdown] id="n1dz8V341gMS" tags=[]
 # ## Test dataset generation
