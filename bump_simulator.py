@@ -77,21 +77,30 @@ class PlaceGridMotionSimulator:
 
     def __call__(self) -> torch.Tensor:
         """Generate current place-cell activation vector."""
+        return self._batch_call(torch.tensor([self.x]))[0]
+
+    def _batch_call(self, x_history: torch.Tensor) -> torch.Tensor:
+        N = len(x_history)
         if self.fourier:
-            # first move bump coarsely, according the integer part of x
-            bump = torch.roll(self._bump, int(self.x))
+            bumps = torch.zeros((N, self.n))
+            for i, x in enumerate(x_history):
+                # first move bump coarsely, according the integer part of x
+                bump = torch.roll(self._bump, int(x))
 
-            # then move finely, using Fourier transform
-            bump = self._fourier_shift(bump, self.x - int(self.x))
+                # then move finely, using Fourier transform
+                bump = self._fourier_shift(bump, x - int(x))
+
+                bumps[i, :] = bump
         else:
-            theta = self.x * 2 * np.pi / self.n
+            theta = x_history * 2 * np.pi / self.n
+            diff = theta[:, None] - self._centers[None, :]
             if self.periodic:
-                exponents = self._kappa * torch.cos(theta - self._centers)
+                exponents = self._kappa * torch.cos(diff)
             else:
-                exponents = -0.5 * self._kappa * (theta - self._centers) ** 2
-            bump = self._prefactor * torch.exp(exponents)
+                exponents = -0.5 * self._kappa * diff ** 2
+            bumps = self._prefactor * torch.exp(exponents)
 
-        return bump
+        return bumps
 
     def move(self, s: float):
         """Shift current position by `s`."""
@@ -107,10 +116,20 @@ class PlaceGridMotionSimulator:
         :param s: sequence of shifts
         :return: tensor of activation vectors, shape `(len(s), self.n)`
         """
-        res = torch.zeros(len(s), self.n)
-        for i, crt_s in enumerate(s):
-            res[i, :] = self()
-            self.move(crt_s.item())
+        if self.periodic:
+            cumul_s = torch.hstack((torch.tensor([0.0]), torch.cumsum(s, dim=0)))
+            x_history = (self.x + cumul_s) % self.n
+
+            # last element is future x position
+            self.x = x_history[-1]
+            x_history = x_history[:-1]
+        else:
+            x_history = torch.empty(len(s))
+            for i, crt_s in enumerate(s):
+                x_history[i] = self.x
+                self.move(crt_s.item())
+
+        res = self._batch_call(x_history)
 
         return res
 
