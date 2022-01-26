@@ -115,10 +115,8 @@ class PlaceGridMultiNonBio:
         :param s: amount by which to propagate
         :return: propagated tensor
         """
-        z_prop = torch.empty_like(z)
-        for i, (crt_z, crt_s) in enumerate(zip(z, s)):
-            crt_grid_prop = self.get_lambda_s_matrix(crt_s)
-            z_prop[i, ...] = (crt_grid_prop @ crt_z[..., None])[..., 0]
+        grid_prop = self.get_lambda_s_matrix(s)
+        z_prop = (grid_prop @ z[..., None])[..., 0]
 
         return z_prop
 
@@ -174,23 +172,31 @@ class PlaceGridMultiNonBio:
 
     @staticmethod
     def _get_lambda_from_parts(rho: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
-        xs = rho[: len(theta)] * torch.cos(theta)
-        ys = rho[: len(theta)] * torch.sin(theta)
+        m = rho.shape[1]
+        mt = theta.shape[1]
 
-        blocks = []
-        for i in range(len(theta)):
-            crt_block = torch.vstack(
-                (
-                    torch.hstack((xs[i], -ys[i])),
-                    torch.hstack((ys[i], xs[i])),
+        xs = rho[:, :mt] * torch.cos(theta)
+        ys = rho[:, :mt] * torch.sin(theta)
+
+        n_batch = len(rho)
+        res = torch.zeros(n_batch, 2 * mt + (m > mt), 2 * mt + (m > mt))
+        for i in range(n_batch):
+            blocks = []
+            for j in range(mt):
+                crt_block = torch.vstack(
+                    (
+                        torch.hstack((xs[i, j], -ys[i, j])),
+                        torch.hstack((ys[i, j], xs[i, j])),
+                    )
                 )
-            )
-            blocks.append(crt_block)
+                blocks.append(crt_block)
 
-        if len(rho) > len(theta):
-            blocks.append(rho[-1])
+            if m > mt:
+                blocks.append(rho[i, -1])
 
-        return torch.block_diag(*blocks)
+            res[i, :, :] = torch.block_diag(*blocks)
+
+        return res
 
     def get_lambda_s_matrix(self, s: torch.Tensor) -> torch.Tensor:
         """Generate the matrix that propagates grid cells forward.
@@ -203,10 +209,25 @@ class PlaceGridMultiNonBio:
         If `self.m % 2 == 1`, a single diagonal element is added at the bottom-right of
         the matrix, equal to `sech(self.xi[-1])`.
         """
-        lbd_s = torch.empty((self.n_ctrl, self.m, self.m))
+        if not torch.is_tensor(s):
+            s = torch.tensor(s)
+        if s.ndim < 2:
+            remove_dim = True
+            s = s[None, :]
+        else:
+            remove_dim = False
+
+        grid_prop = torch.empty((len(s), self.n_ctrl, self.m, self.m))
+        rho = 1 / torch.cosh(self.xi)
+
+        all_rho = rho[None, :] ** s[..., None]
+        all_theta = self.theta[None, :] * s[..., None]
         for k in range(self.n_ctrl):
-            lbd_s[k, ...] = self._get_lambda_from_parts(
-                1 / torch.cosh(self.xi[k]) ** s[k], s[k] * self.theta[k]
+            grid_prop[:, k, ...] = self._get_lambda_from_parts(
+                all_rho[:, k], all_theta[:, k]
             )
 
-        return lbd_s
+        if not remove_dim:
+            return grid_prop
+        else:
+            return grid_prop[0]
