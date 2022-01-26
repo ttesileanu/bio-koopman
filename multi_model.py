@@ -180,21 +180,16 @@ class PlaceGridMultiNonBio:
 
         n_batch = len(rho)
         res = torch.zeros(n_batch, 2 * mt + (m > mt), 2 * mt + (m > mt))
-        for i in range(n_batch):
-            blocks = []
-            for j in range(mt):
-                crt_block = torch.vstack(
-                    (
-                        torch.hstack((xs[i, j], -ys[i, j])),
-                        torch.hstack((ys[i, j], xs[i, j])),
-                    )
-                )
-                blocks.append(crt_block)
 
-            if m > mt:
-                blocks.append(rho[i, -1])
+        for j in range(mt):
+            idx = 2 * j
+            res[:, idx, idx] = xs[:, j]
+            res[:, idx + 1, idx + 1] = xs[:, j]
+            res[:, idx, idx + 1] = -ys[:, j]
+            res[:, idx + 1, idx] = ys[:, j]
 
-            res[i, :, :] = torch.block_diag(*blocks)
+        if m > mt:
+            res[:, -1, -1] = rho[:, -1]
 
         return res
 
