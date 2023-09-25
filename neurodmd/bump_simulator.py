@@ -53,7 +53,7 @@ class PlaceGridMotionSimulator:
                 2 * np.pi * torch.i0(torch.FloatTensor([self._kappa]))
             )
         else:
-            self._prefactor = 1 / np.sqrt(2 * np.pi * self.sigma ** 2)
+            self._prefactor = 1 / np.sqrt(2 * np.pi * self.sigma**2)
 
         if self.fourier:
             exponents = self._kappa * torch.cos(self._centers)
@@ -84,6 +84,8 @@ class PlaceGridMotionSimulator:
         if self.fourier:
             bumps = torch.zeros((N, self.n))
             for i, x in enumerate(x_history):
+                x = x.item()
+
                 # first move bump coarsely, according the integer part of x
                 bump = torch.roll(self._bump, int(x))
 
@@ -97,7 +99,7 @@ class PlaceGridMotionSimulator:
             if self.periodic:
                 exponents = self._kappa * torch.cos(diff)
             else:
-                exponents = -0.5 * self._kappa * diff ** 2
+                exponents = -0.5 * self._kappa * diff**2
             bumps = self._prefactor * torch.exp(exponents)
 
         return bumps
