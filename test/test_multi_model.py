@@ -125,7 +125,8 @@ def test_propagate_place_matches_expectation_multi_sample(default_sys):
     data = much_data(default_sys)
     y_hat = default_sys.propagate_place(data.x, data.s)
 
-    y_hat_exp = torch.zeros_like(y_hat)
+    y_hat_exp = data.x.clone()
+    eye = torch.eye(default_sys.m)
     for i in range(data.samples):
         lbd_s = default_sys.get_lambda_s_matrix(data.s[i])
         crt_x = data.x[i]
@@ -134,10 +135,10 @@ def test_propagate_place_matches_expectation_multi_sample(default_sys):
         V = default_sys.V
 
         for k, crt_lbd_s in enumerate(lbd_s):
-            crt_y_hat_exp = V[k] @ crt_lbd_s @ U[k] @ crt_x
+            crt_y_hat_exp = V[k] @ (crt_lbd_s - eye) @ U[k] @ crt_x
             y_hat_exp[i] += crt_y_hat_exp
 
-    assert torch.allclose(y_hat, y_hat_exp / default_sys.n_ctrl)
+    assert torch.allclose(y_hat, y_hat_exp)
 
 
 def test_loss_is_correct(default_sys):
@@ -163,9 +164,10 @@ def test_u_derivative(default_sys):
     eps = data.y - y_pred
 
     for k, crt_lbd_s in enumerate(lbd_s):
-        exp_grad_u = -crt_lbd_s.T @ default_sys.V[k].T @ eps.T @ data.x / default_sys.n
+        crt_lbd_s1 = crt_lbd_s - torch.eye(default_sys.m)
+        exp_grad_u = -crt_lbd_s1.T @ default_sys.V[k].T @ eps.T @ data.x / default_sys.n
 
-        assert torch.allclose(default_sys.U.grad[k], exp_grad_u / default_sys.n_ctrl)
+        assert torch.allclose(default_sys.U.grad[k], exp_grad_u)
 
 
 def test_v_derivative(default_sys):
@@ -181,9 +183,10 @@ def test_v_derivative(default_sys):
     eps = data.y - y_pred
 
     for k, crt_lbd_s in enumerate(lbd_s):
-        exp_grad_v = -eps.T @ data.x @ default_sys.U[k].T @ crt_lbd_s.T / default_sys.n
+        crt_lbd_s1 = crt_lbd_s - torch.eye(default_sys.m)
+        exp_grad_v = -eps.T @ data.x @ default_sys.U[k].T @ crt_lbd_s1.T / default_sys.n
 
-        assert torch.allclose(default_sys.V.grad[k], exp_grad_v / default_sys.n_ctrl)
+        assert torch.allclose(default_sys.V.grad[k], exp_grad_v)
 
 
 def test_xi_derivative_for_1x1_block(default_sys_odd):
@@ -193,15 +196,13 @@ def test_xi_derivative_for_1x1_block(default_sys_odd):
     loss = default_sys_odd.loss(data.x, data.y, data.s)
     loss.backward()
 
-    lbd_s = default_sys_odd.get_lambda_s_matrix(data.s[0])
-
     y_pred = default_sys_odd.propagate_place(data.x, data.s)
     eps = data.y - y_pred
 
     rho = 1 / torch.cosh(default_sys_odd.xi[:, -1])
     der_rho = data.s[0] * rho ** (data.s[0] - 1)
 
-    for k, crt_lbd_s in enumerate(lbd_s):
+    for k in range(default_sys_odd.n_ctrl):
         exp_grad_rho_1x1 = (
             -der_rho[k]
             * torch.dot(
@@ -215,9 +216,7 @@ def test_xi_derivative_for_1x1_block(default_sys_odd):
             -exp_grad_rho_1x1 * rho[k] ** 2 * torch.sinh(default_sys_odd.xi[k, -1])
         )
 
-        assert torch.allclose(
-            default_sys_odd.xi.grad[k, -1], exp_grad_xi_1x1 / default_sys_odd.n_ctrl
-        )
+        assert torch.allclose(default_sys_odd.xi.grad[k, -1], exp_grad_xi_1x1)
 
 
 def test_xi_derivative_for_2x2_block(default_sys_odd):
@@ -235,7 +234,7 @@ def test_xi_derivative_for_2x2_block(default_sys_odd):
     rho = 1 / torch.cosh(default_sys_odd.xi[0])
 
     for k, crt_lbd_s in enumerate(lbd_s):
-        der_lbd_s = data.s[0, k] * lbd_s[k, :2, :2] / rho[k]
+        der_lbd_s = data.s[0, k] * crt_lbd_s[:2, :2] / rho[k]
 
         exp_grad_rho_2x2 = (
             -torch.dot(
@@ -252,9 +251,7 @@ def test_xi_derivative_for_2x2_block(default_sys_odd):
         )
 
         assert torch.allclose(
-            default_sys_odd.xi.grad[k, 0],
-            exp_grad_xi_2x2 / default_sys_odd.n_ctrl,
-            atol=1e-6,
+            default_sys_odd.xi.grad[k, 0], exp_grad_xi_2x2, atol=1e-6
         ), f"problem at index {k}"
 
 
@@ -265,8 +262,6 @@ def test_theta_derivative_for_2x2_block(default_sys_odd):
     loss = default_sys_odd.loss(data.x, data.y, data.s)
     loss.backward()
 
-    lbd_s = default_sys_odd.get_lambda_s_matrix(data.s[0])
-
     y_pred = default_sys_odd.propagate_place(data.x, data.s)
     eps = data.y - y_pred
 
@@ -275,7 +270,7 @@ def test_theta_derivative_for_2x2_block(default_sys_odd):
     cc = torch.cos(theta)
     ss = torch.sin(theta)
 
-    for k, crt_lbd_s in enumerate(lbd_s):
+    for k in range(default_sys_odd.n_ctrl):
         der_lbd_s = (
             data.s[0, k]
             * rho[k] ** data.s[0, k]
@@ -294,7 +289,5 @@ def test_theta_derivative_for_2x2_block(default_sys_odd):
         )
 
         assert torch.allclose(
-            default_sys_odd.theta.grad[k, 0],
-            exp_grad_theta_2x2 / default_sys_odd.n_ctrl,
-            atol=1e-5,
+            default_sys_odd.theta.grad[k, 0], exp_grad_theta_2x2, atol=1e-5
         ), f"problem at index {k}"
