@@ -6,21 +6,21 @@ Some experiments with understanding grid cells from the viewpoint of transfer op
 
 To get started with the code, you need to install the `neurodmd` package. To do so, make sure to switch to the main repo folder. The first step is to make a virtual environment and activate it.
 
-**Using conda.**
+#### Using conda
 
 ```sh
 conda create -n bio-koop python=3.9
 conda activate bio-koop
 ```
 
-**Using venv.**
+#### Using venv
 
 ```sh
 python -m venv env
 source venv/bin/activate
 ```
 
-**Install (either conda or venv).**
+#### Install (either conda or venv)
 
 ```sh
 pip install -e .
@@ -28,7 +28,9 @@ pip install -e .
 
 This makes an "editable" install so that any changes to the code take effect instantly.
 
-**Test install.** Switch to the `test` folder and run
+#### Test install
+
+Switch to the `test` folder and run
 
 ```sh
 pytest .
