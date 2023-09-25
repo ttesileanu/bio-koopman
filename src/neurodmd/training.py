@@ -170,3 +170,71 @@ def test(
     avg_loss = total_loss / count
 
     return avg_loss
+
+
+def train_video(
+    model: nn.Module,
+    loader: Collection,
+    progress: Optional[Callable] = tqdm,
+    test_every: int = 100,
+    test_set: Optional[Sequence] = None,
+) -> SimpleNamespace:
+    """A trainer for place/grid systems with custom steps with datasets containing
+    consecutive frames.
+
+    This uses `model.training_step`.
+
+    :param model: the model to train
+    :param loader: data loader; this can be any iterable returning pairs of `data` and
+        `shift`; the samples should be provided in correct temporal order
+    :param progress: progress bar callable -- must have the `tqdm` interface
+    :param test_every: how often to call `test` function (in batches)
+    :param test_set: data loader for test set
+    :return: namespace containing:
+        * train_loss:   loss curve on train set; one value for every batch
+            (the following fields only if `test_set` is not `None`:)
+        * test_loss:    loss curve on test set; one value every `test_every` batch
+        * test_idxs:    batch indices where a test was performed
+    """
+    # figure out total number of samples
+    if hasattr(loader, "dataset"):
+        n_total = len(loader.dataset)
+        step = None
+    else:
+        n_total = len(loader)
+        step = 1
+
+    train_loss = []
+    test_loss = []
+    test_idxs = []
+
+    batch_idx = 0
+
+    with progress(
+        total=n_total, postfix="loss: 0", mininterval=0.5
+    ) if progress is not None else ExitStack() as pbar:
+        for data, shift in loader:
+            loss = model.training_step(data, shift)
+
+            train_loss.append(loss)
+
+            # update progress bar
+            if progress is not None:
+                pbar.postfix = f"train batch loss: {loss:.6f}"
+                pbar.update(len(data) if step is None else step)
+
+            # test on test set, if any given
+            # if test_set is not None and batch_idx % test_every == 0:
+            #     crt_loss = test_video(model, test_set, progress=None)
+            #     test_loss.append(crt_loss)
+            #     test_idxs.append(batch_idx)
+
+            # keep batch index sync'd up
+            batch_idx += 1
+
+    res = SimpleNamespace(train_loss=train_loss)
+    if test_set is not None:
+        res.test_loss = test_loss
+        res.test_idxs = test_idxs
+
+    return res

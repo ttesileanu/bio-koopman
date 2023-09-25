@@ -24,9 +24,9 @@ class PlaceGridMultiNonBio:
         (n_ctrl, (m + 1) // 2) and (n_ctrl, m // 2), respectively
 
     More specifically, a shift of magnitude s is implemented by the transformation
-            mean_k(V[k] @ L[k] ** s[k] @ U[k]) @ x ,
-    where x is the input sample, and L[k] is a block-diagonal matrix whose entries are
-    set by xi[k] and theta[k].
+            x + sum_k(V[k] @ (L[k] ** s[k] - I_m) @ U[k]) @ x ,
+    where x is the input sample, L[k] is a block-diagonal matrix whose entries are
+    set by xi[k] and theta[k], and I_p is the identity matrix of size p.
 
     In detail, most of the diagonal blocks defining L are 2x2 blocks, and:
         xi: list of `arcsech` of magnitudes for block-diagonal matrices
@@ -100,7 +100,7 @@ class PlaceGridMultiNonBio:
         Vaug = self.V
         # add a dummy index to treat z as batch of column vectors
         zaug = z[..., None]
-        ypredaug = torch.mean(Vaug @ zaug, dim=1)
+        ypredaug = torch.sum(Vaug @ zaug, dim=1)
 
         # get rid of the dummy index we added to turn x into a batch of column vectors
         return ypredaug[..., 0]
@@ -115,7 +115,7 @@ class PlaceGridMultiNonBio:
         :param s: amount by which to propagate
         :return: propagated tensor
         """
-        grid_prop = self.get_lambda_s_matrix(s)
+        grid_prop = self.get_lambda_s_matrix(s) - torch.eye(self.m)
         z_prop = (grid_prop @ z[..., None])[..., 0]
 
         return z_prop
@@ -129,7 +129,7 @@ class PlaceGridMultiNonBio:
         """
         z = self.to_grid(x)
         z_tilde = self.propagate_grid(z, s)
-        y = self.from_grid(z_tilde)
+        y = x + self.from_grid(z_tilde)
         return y
 
     def loss(self, x: torch.Tensor, y: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
