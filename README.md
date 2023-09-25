@@ -30,10 +30,8 @@ This makes an "editable" install so that any changes to the code take effect ins
 
 #### Test install
 
-Switch to the `test` folder and run
-
 ```sh
-pytest .
+pytest test
 ```
 
 All tests should run without errors. If there are errors, double check your environment. If there are still errors, make a new environment following the instructions above. If there are still errors after that, file a bug, including as much information as possible.
